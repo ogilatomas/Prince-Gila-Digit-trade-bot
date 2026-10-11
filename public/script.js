@@ -21,11 +21,11 @@ const $=id=>document.getElementById(id);const sample=[['Volatility 10 Index',7,[
   const subscriptions = new Set();
   const selectedRules = () => new Set([...document.querySelectorAll('.smartRule:checked')].map(x=>x.value));
   const status = (message, state='') => { el('smartProgress').textContent=message; el('smartStatus').textContent='● '+(state || (running?'Running':'Stopped')); };
-  const digitFromQuote = (quote, pipSize) => {
-    const p = Math.max(0, Math.min(8, Number(pipSize)||0));
-    const fixed = Number(quote).toFixed(p).replace('.', '');
-    return Number(fixed.slice(-1));
-  };
+     const digitFromQuote = (quote, pip) => {
+     const p = Number(pip);
+     const dec = (!Number.isFinite(p) || p <= 0) ? 2 : (p >= 1 && Number.isInteger(p)) ? Math.min(p, 8) : Math.min(8, Math.max(0, Math.round(-Math.log10(p))));
+     return Number(Number(quote).toFixed(dec).slice(-1));
+   };
   const getCounts = digits => { const c=Array(10).fill(0); digits.forEach(d=>c[d]++); return c; };
   function checkRule(digits, rule) {
     if (digits.length < WINDOW) return null;
