@@ -10,6 +10,7 @@ const DERIV_API_BASE = 'https://api.derivws.com';
 const DERIV_AUTH_BASE = 'https://auth.deriv.com';
 const DERIV_PUBLIC_WS = 'wss://api.derivws.com/trading/v1/options/ws/public';
 
+app.set('trust proxy', 1);
 app.use(express.json());
 app.use(session({
   secret: process.env.SESSION_SECRET || 'ogila-demo-session-change-me',
