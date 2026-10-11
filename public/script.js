@@ -151,3 +151,24 @@ const $=id=>document.getElementById(id);const sample=[['Volatility 10 Index',7,[
   el('smartStop').addEventListener('click',()=>stop());
   window.addEventListener('beforeunload',()=>{try{if(ws)ws.close()}catch(_){}});
 })();
+// ---- Deriv connection status ----
+async function refreshDeriv(){
+  try{
+    const d=await (await fetch('/api/deriv/accounts',{credentials:'same-origin'})).json();
+    if(!d.connected){
+      $('apiState').textContent=d.configured?'Not connected — click Connect':'Server missing DERIV_CLIENT_ID';
+      return;
+    }
+    const active=d.accounts.find(a=>a.loginid===d.active);
+    $('apiState').textContent='Connected · '+d.active;
+    $('mode').value=active&&active.isVirtual?'Demo':'Real';
+    const b=await (await fetch('/api/deriv/balance',{credentials:'same-origin'})).json();
+    if(b.balance!==undefined){
+      const t=b.currency+' '+Number(b.balance).toLocaleString('en-US',{minimumFractionDigits:2});
+      ['balance','balance2','balance3'].forEach(id=>{const el=$(id);if(el)el.textContent=t});
+    }
+  }catch(e){ $('apiState').textContent='Server unreachable'; }
+}
+const qs=new URLSearchParams(location.search);
+if(qs.get('derivError')) toast(qs.get('derivError'));
+refreshDeriv();
