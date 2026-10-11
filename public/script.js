@@ -82,12 +82,14 @@ const $=id=>document.getElementById(id);const sample=[['Volatility 10 Index',7,[
     tbody.prepend(tr); while(tbody.children.length>30) tbody.lastElementChild.remove();
   }
   function onTick(tick) {
+   if(tick && !tick.symbol && tick.underlying_symbol) tick.symbol=tick.underlying_symbol; 
     if(!running || !tick || !tick.symbol) return;
     const state=marketData.get(tick.symbol); if(!state) return;
-    const digit=digitFromQuote(tick.quote,state.pipSize); state.digits.push(digit);
-    const tickKey=String(tick.epoch||'')+':'+String(tick.quote);
-    for(const rule of rules) {
-      if(!selectedRules().has(rule.name)) continue;
+    const digitFromQuote = (quote, pip) => {
+  const p = Number(pip);
+  const dec = (!Number.isFinite(p) || p <= 0) ? 2 : (p >= 1 && Number.isInteger(p)) ? Math.min(p, 8) : Math.min(8, Math.max(0, Math.round(-Math.log10(p))));
+  return Number(Number(quote).toFixed(dec).slice(-1));
+};
       const signal=checkRule(state.digits,rule);
       renderRow(tick.symbol,state.name,state,rule,signal);
       if(signal) buySignal(tick.symbol,state.name,rule,signal,tickKey);
@@ -109,7 +111,7 @@ const $=id=>document.getElementById(id);const sample=[['Volatility 10 Index',7,[
     running=true; el('smartStart').disabled=true; el('smartStop').disabled=false;
     status('Connecting to Deriv market data…','Connecting');
     ws=new WebSocket('wss://api.derivws.com/trading/v1/options/ws/public');
-    ws.onopen=()=>send({active_symbols:'brief', product_type:'basic', req_id:1});
+    ws.onopen=()=>send({active_symbols:'brief', req_id:1});
     ws.onerror=()=>status('Market data connection error. Check network and retry.','Connection error');
     ws.onclose=()=>{ if(running){running=false;el('smartStart').disabled=false;el('smartStop').disabled=true;status('Market data disconnected. Restart Smart Strategy to reconnect.','Disconnected');} };
     ws.onmessage=async event=>{
@@ -117,7 +119,7 @@ const $=id=>document.getElementById(id);const sample=[['Volatility 10 Index',7,[
       if(msg.error){status('Deriv data error: '+msg.error.message,'API error');return;}
       if(msg.msg_type==='active_symbols' && !initialized){
         initialized=true;
-        let symbols=(msg.active_symbols||[]).filter(s=>s.exchange_is_open!==0 && s.symbol && s.pip_size!==undefined);
+       let symbols=(msg.active_symbols||[]).map(s=>({...s,symbol:s.underlying_symbol||s.symbol,display_name:s.underlying_symbol_name||s.display_name})).filter(s=>s.exchange_is_open!==0 && s.symbol && s.pip_size!==undefined);
         const filter=el('smartMarketFilter').value;
         if(filter==='synthetic') symbols=symbols.filter(s=>String(s.market||'').toLowerCase().includes('synthetic') || String(s.submarket||'').toLowerCase().includes('continuous'));
         // Limit subscription fan-out to active symbols available from this API response.
