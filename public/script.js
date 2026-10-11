@@ -81,15 +81,15 @@ const $=id=>document.getElementById(id);const sample=[['Volatility 10 Index',7,[
     [new Date().toLocaleTimeString(),strategy,barrier,`$${stake}`,result].forEach(v=>{const td=document.createElement('td');td.textContent=v;tr.appendChild(td)});
     tbody.prepend(tr); while(tbody.children.length>30) tbody.lastElementChild.remove();
   }
-  function onTick(tick) {
-   if(tick && !tick.symbol && tick.underlying_symbol) tick.symbol=tick.underlying_symbol; 
+   function onTick(tick) {
+    if(tick && !tick.symbol && tick.underlying_symbol) tick.symbol=tick.underlying_symbol;
     if(!running || !tick || !tick.symbol) return;
     const state=marketData.get(tick.symbol); if(!state) return;
-    const digitFromQuote = (quote, pip) => {
-  const p = Number(pip);
-  const dec = (!Number.isFinite(p) || p <= 0) ? 2 : (p >= 1 && Number.isInteger(p)) ? Math.min(p, 8) : Math.min(8, Math.max(0, Math.round(-Math.log10(p))));
-  return Number(Number(quote).toFixed(dec).slice(-1));
-};
+    const digit=window.DerivFeed.digitOf(tick.quote,window.DerivFeed.decimalsFrom(state.pipSize)); state.digits.push(digit);
+    if(state.digits.length>WINDOW) state.digits.shift();
+    const tickKey=String(tick.epoch||'')+':'+String(tick.quote);
+    for(const rule of rules) {
+      if(!selectedRules().has(rule.name)) continue;
       const signal=checkRule(state.digits,rule);
       renderRow(tick.symbol,state.name,state,rule,signal);
       if(signal) buySignal(tick.symbol,state.name,rule,signal,tickKey);
@@ -135,7 +135,7 @@ const $=id=>document.getElementById(id);const sample=[['Volatility 10 Index',7,[
               ws.addEventListener('message',handler);send({ticks_history:sym.symbol,adjust_start_time:1,count:WINDOW,end:'latest',style:'ticks',req_id:reqId});
               setTimeout(()=>{ws.removeEventListener('message',handler);reject(new Error('History timeout'));},12000);
             });
-            const digits=(history.history?.prices||[]).map(q=>digitFromQuote(q,sym.pip_size));
+           const digits=(history.history?.prices||[]).map(q=>window.DerivFeed.digitOf(q,window.DerivFeed.decimalsFrom(sym.pip_size))); 
             const state={name:sym.display_name||sym.symbol,pipSize:sym.pip_size,digits:digits.slice(-WINDOW)};
             marketData.set(sym.symbol,state);
             send({ticks:sym.symbol,subscribe:1}); subscriptions.add(sym.symbol);
