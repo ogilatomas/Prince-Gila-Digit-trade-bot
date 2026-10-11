@@ -108,7 +108,7 @@ const $=id=>document.getElementById(id);const sample=[['Volatility 10 Index',7,[
     if(el('mode').value==='Real'){if(!window.confirm('REAL MONEY WARNING: Smart Strategy will automatically purchase digit contracts using your selected REAL Deriv account. Losses are possible. Confirm you want to enable real-money auto-buy?')) return; realConfirmed=true;}
     running=true; el('smartStart').disabled=true; el('smartStop').disabled=false;
     status('Connecting to Deriv market data…','Connecting');
-    ws=new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
+    ws=new WebSocket('wss://api.derivws.com/trading/v1/options/ws/public');
     ws.onopen=()=>send({active_symbols:'brief', product_type:'basic', req_id:1});
     ws.onerror=()=>status('Market data connection error. Check network and retry.','Connection error');
     ws.onclose=()=>{ if(running){running=false;el('smartStart').disabled=false;el('smartStop').disabled=true;status('Market data disconnected. Restart Smart Strategy to reconnect.','Disconnected');} };
