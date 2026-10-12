@@ -700,6 +700,17 @@ app.post('/api/deriv/trade', async (req, res) => {
     const proposal = proposalResponse.proposal || {};
     const proposalId = proposal.id;
     const askPrice = Number(proposal.ask_price);
+    
+console.log('Deriv proposal diagnostic:', JSON.stringify({
+  msg_type: proposalResponse.msg_type,
+  req_id: proposalResponse.req_id,
+  proposal_id_received: Boolean(proposal.id),
+  ask_price: proposal.ask_price,
+  contract_type: proposal.contract_type,
+  underlying_symbol: proposal.underlying_symbol,
+  longcode: proposal.longcode
+}));
+
 
     if (!proposalId || !Number.isFinite(askPrice)) {
       throw new Error('Deriv returned an incomplete trade proposal.');
