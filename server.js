@@ -379,13 +379,34 @@ function wsRequest(ws, payload, { timeoutMs = 15000, predicate } = {}) {
         return;
       }
 
+     
+      // Ignore responses that belong to a different request.
+      if (data.req_id !== reqId) return;
+
       if (data.error) {
         cleanup();
-        const apiError = data.error || {};
-        const err = new Error(apiError.message || 'Deriv WebSocket error.');
+
+        const apiError = data.error;
+        const err = new Error(
+          apiError.message || 'Deriv WebSocket error.'
+        );
+
         err.derivCode = apiError.code || apiError.error_code || null;
         err.derivDetails = apiError.details || null;
         err.derivRequest = request;
+
+        console.error('Deriv WebSocket request failed:', JSON.stringify({
+          req_id: reqId,
+          requestType: request.proposal
+            ? 'proposal'
+            : request.buy
+              ? 'buy'
+              : 'other',
+          errorCode: err.derivCode,
+          errorMessage: err.message,
+          proposalId: request.buy || null
+        }));
+
         reject(err);
         return;
       }
