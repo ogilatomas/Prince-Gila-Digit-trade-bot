@@ -1,0 +1,73 @@
+/* ===== ROBOTIC THEME: fonts + images. Loaded AFTER style.css so it overrides it ===== */
+:root{
+  --f-display:'Orbitron',Arial,sans-serif;      /* big headings, brand */
+  --f-ui:'Rajdhani',Arial,sans-serif;           /* menu, tabs, buttons */
+  --f-body:'Exo 2',Arial,sans-serif;            /* general text */
+  --f-mono:'Share Tech Mono','Courier New',monospace; /* numbers, tables */
+  --f-tech:'Chakra Petch',Arial,sans-serif;     /* pills, chips, labels */
+  --f-pop:'Audiowide','Orbitron',sans-serif;    /* slogan, motto */
+}
+body{font-family:var(--f-body);font-size:14px;letter-spacing:.2px}
+button,input,select{font-family:var(--f-tech)}
+
+/* headings + brand */
+.brand b,.hero h1,.pg-title h2,.sectionhead h2,.panel h2,.rules h2{font-family:var(--f-display);letter-spacing:1px;text-transform:uppercase}
+.brand b{font-size:22px;text-shadow:0 0 14px #00f59b66}
+.hero h1{font-size:24px;text-shadow:0 0 18px #19c9f488}
+.panel h2,.sectionhead h2{font-size:14px;color:#e8fbff}
+.brand small,.welcome-top small,.hero p,.sectionhead p{font-family:var(--f-tech)}
+.slogan,.motto h2,.motto p{font-family:var(--f-pop)}
+.slogan{font-size:19px;text-shadow:0 0 16px var(--green)}
+
+/* menu, tabs, buttons */
+nav a{font-family:var(--f-ui);font-size:15px;font-weight:600;letter-spacing:1px;text-transform:uppercase;transition:.2s}
+nav a:hover{transform:translateX(4px);box-shadow:0 0 14px #00f59b66}
+.tabs button,.modebuttons button,.start,.stop,.tradebtn,.cc-buttons button{font-family:var(--f-ui);font-weight:700;letter-spacing:1px;text-transform:uppercase}
+.start{box-shadow:0 0 16px #00f59b66}
+.start:hover{filter:brightness(1.15)}
+
+/* numbers + tables look like a machine readout */
+.balance b,.stats b,.pg-balance b,.pg-kpis b,.perf b,.accountbox b,.timer b,td,th,table{font-family:var(--f-mono)}
+.stats b,.balance b{text-shadow:0 0 10px currentColor}
+th{font-family:var(--f-tech);letter-spacing:.5px}
+
+/* chips, pills, labels */
+.chips span,.pill,.cc-group label,.controls label,.cc-card,.pg-s,.pg-t,.floating{font-family:var(--f-tech)}
+.chips span{background:#04182866;transition:.2s}
+.chips span:hover{box-shadow:0 0 12px #19c9f499;transform:translateY(-2px)}
+
+/* panels: cut corners + glowing HUD edge */
+.panel{position:relative;border-radius:4px 18px 4px 18px;animation:roboGlow 4s ease-in-out infinite}
+@keyframes roboGlow{0%,100%{box-shadow:0 0 10px #007fa41c,inset 0 0 14px #052b42}50%{box-shadow:0 0 22px #19c9f433,inset 0 0 18px #06395a}}
+.panel::before,.panel::after{content:"";position:absolute;width:16px;height:16px;border:2px solid var(--green);pointer-events:none}
+.panel::before{top:-1px;left:-1px;border-right:0;border-bottom:0}
+.panel::after{bottom:-1px;right:-1px;border-left:0;border-top:0}
+
+/* HERO: robot photo as background with scanner line */
+.hero{position:relative;overflow:hidden;min-height:230px;
+  background:linear-gradient(90deg,#071a2bf5 0%,#071a2bd9 38%,#071a2b66 70%,#071a2b33 100%),
+             url(images/robot-hero.jpg) right 14%/cover no-repeat}
+.hero::after{content:"";position:absolute;left:0;right:0;top:-40%;height:40%;
+  background:linear-gradient(transparent,#19c9f433,transparent);animation:roboScan 5s linear infinite;pointer-events:none}
+@keyframes roboScan{to{top:110%}}
+.hero>*{position:relative;z-index:1}
+
+/* the 🤖 emoji becomes the AI robot photo in a glowing ring */
+.robot{font-size:0;width:130px;height:130px;flex:none;border-radius:50%;border:3px solid var(--green);
+  background:url(images/robot-ai.jpg) center/cover;box-shadow:0 0 26px #00f59b88,inset 0 0 18px #000;animation:roboPulse 3s ease-in-out infinite}
+@keyframes roboPulse{50%{box-shadow:0 0 44px #19c9f4cc,inset 0 0 18px #000}}
+
+/* Bot Profile avatar (the emoji is hidden, the crown stays) */
+.pg-avatar{font-size:0;background:url(images/robot-hero.jpg) 55% 25%/230% no-repeat;border-color:var(--cyan)}
+
+/* robot gallery strip (3 pictures) */
+.robo-gallery{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:8px 0}
+.robo-gallery figure{position:relative;margin:0;height:170px;overflow:hidden;border:1px solid var(--line);border-radius:4px 18px 4px 18px;background:#031020}
+.robo-gallery img{width:100%;height:100%;object-fit:cover;display:block;filter:saturate(1.15) contrast(1.05);transition:transform .6s}
+.robo-gallery figure:hover img{transform:scale(1.08)}
+.robo-gallery figure::after{content:"";position:absolute;inset:0;background:linear-gradient(transparent 45%,#020b17ee);pointer-events:none}
+.robo-gallery figcaption{position:absolute;left:12px;bottom:10px;z-index:1;font-family:var(--f-display);font-size:12px;letter-spacing:2px;color:var(--green);text-shadow:0 0 10px #00f59b}
+.robo-gallery figcaption small{display:block;font-family:var(--f-tech);letter-spacing:.5px;color:#c2d8e7;font-size:10px;text-shadow:none;margin-top:2px}
+
+@media(max-width:700px){.robo-gallery{grid-template-columns:1fr}.hero{min-height:200px}.robot{display:block;width:70px;height:70px}}
+@media(prefers-reduced-motion:reduce){.panel,.robot,.hero::after{animation:none}}
