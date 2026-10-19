@@ -1,5 +1,84 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Manual Trading — DigitTrade Bot</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Space+Grotesk:wght@400;500;700&display=swap">  <script type="module" crossorigin src="/manual/assets/index-7b6KSv3i.js"></script>
-  <link rel="stylesheet" crossorigin href="/manual/assets/index-CvgO8kS0.css">
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Manual Trading — DigitTrade Bot</title>
+<link rel="stylesheet" href="/manual/manual.css">
 </head>
-<body><a href="/" style="position:fixed;bottom:12px;left:12px;z-index:50;padding:6px 12px;border-radius:8px;background:#111;color:#fff;font:14px sans-serif;text-decoration:none">← Back to Dashboard</a><div id="root"></div></body></html>
+<body>
+<div id="modeBar" class="modebar demo">DEMO ACCOUNT — no real money</div>
+
+<header class="top">
+  <a class="back" href="/">← Back to Dashboard</a>
+  <h1>Manual <em>Trading</em></h1>
+  <div class="acct">
+    <select id="acctSelect" aria-label="Deriv account" disabled></select>
+    <span id="modeBadge" class="badge">—</span>
+    <div class="bal"><small>Balance</small><b id="balance">—</b></div>
+  </div>
+</header>
+
+<div id="connectBox" class="connect" hidden>
+  <p id="connectMsg">Connect your Deriv account to place trades.</p>
+  <a id="connectBtn" class="btn-connect" href="/auth/deriv/login">Connect Deriv</a>
+</div>
+
+<main class="grid">
+  <section class="left">
+    <div class="panel">
+      <div class="feedhead">
+        <select id="market" aria-label="Market"></select>
+        <span class="feed"><i id="feedDot" class="dot"></i><span id="feedText">Connecting…</span></span>
+        <span class="price" id="price">—</span>
+        <span class="lastdigit">Last digit <b id="lastDigit">—</b></span>
+      </div>
+      <div id="chart" class="chart"></div>
+    </div>
+    <div class="panel">
+      <h2>Digit frequency <small id="freqNote">(last 100 ticks)</small></h2>
+      <div id="freq" class="freq"></div>
+    </div>
+  </section>
+
+  <aside class="right">
+    <div class="panel">
+      <div id="tabs" class="tabs"></div>
+
+      <div id="barrierBox" class="barrierbox">
+        <p id="barrierLabel" class="lbl">Digit</p>
+        <div id="digits" class="digits"></div>
+      </div>
+
+      <div class="two">
+        <label>Stake
+          <input id="stake" type="number" min="0.35" step="0.01" value="1">
+        </label>
+        <label>Duration (ticks)
+          <input id="dur" type="number" min="1" max="10" step="1" value="5">
+        </label>
+      </div>
+
+      <div class="buys">
+        <button id="buyA" class="buy a" disabled>—</button>
+        <button id="buyB" class="buy b" disabled>—</button>
+      </div>
+      <p class="fine">Payout is set by Deriv at the moment of purchase and shown in the result. One trade at a time.</p>
+    </div>
+
+    <div class="panel">
+      <h2>Session limits <small>(set on the server)</small></h2>
+      <div id="risk" class="risk"><span class="muted">Connect Deriv to see limits.</span></div>
+    </div>
+
+    <div class="panel">
+      <h2>Positions</h2>
+      <ul id="positions" class="positions"><li class="muted">No trades yet.</li></ul>
+    </div>
+  </aside>
+</main>
+
+<div id="toast" class="toast" role="status"></div>
+<script src="/manual/manual.js"></script>
+</body>
+</html>
