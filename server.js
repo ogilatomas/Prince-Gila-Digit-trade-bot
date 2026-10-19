@@ -247,6 +247,7 @@ app.get('/auth/deriv/callback', async (req, res) => {
 });
 
 app.post('/auth/deriv/logout', (req, res) => {
+  try { (req.session.deriv?.accounts || []).forEach(a => dropPooled(a)); } catch (_) {}   // close the saved fast connection
   delete req.session.deriv;
   delete req.session.derivOAuth;
   res.json({ ok: true });
@@ -453,6 +454,72 @@ function closeSocket(ws) {
   try { ws.close(); } catch (_) {}
 }
 
+// -----------------------------------------------------------------------------
+// SPEED: one long-lived, already-authenticated Deriv socket per account.
+// Before, every trade did: REST one-time-password call -> new TLS/WebSocket connection ->
+// proposal -> buy. That setup alone cost a second or more per trade. Now the socket is opened
+// once, kept alive with pings, and reused by trades, balance checks and quotes.
+// -----------------------------------------------------------------------------
+const socketPool = new Map();            // "loginid|accountId" -> { ws, pending, lastUsed, lastMsg, timer }
+const SOCKET_IDLE_MS = 10 * 60 * 1000;   // close after 10 minutes without use
+const SOCKET_PING_MS = 20 * 1000;
+const SOCKET_DEAD_MS = 50 * 1000;        // no message (not even a pong) for this long = dead, replace it
+let reqCounter = 1000;
+const nextReq = () => (reqCounter = (reqCounter % 900000000) + 1);   // unique ids on a shared socket
+
+const poolKey = acct => `${acct.loginid}|${acct.accountId}`;
+
+function dropPooled(acct) {
+  const k = poolKey(acct), e = socketPool.get(k);
+  if (!e) return;
+  socketPool.delete(k);
+  clearInterval(e.timer);
+  if (e.ws) closeSocket(e.ws);
+}
+
+async function getPooledSocket(acct, accessToken) {
+  const k = poolKey(acct), existing = socketPool.get(k);
+  if (existing) {
+    if (existing.pending) return existing.pending;
+    if (existing.ws && existing.ws.readyState === 1) { existing.lastUsed = Date.now(); return existing.ws; }
+    dropPooled(acct);
+  }
+  const entry = { ws: null, pending: null, lastUsed: Date.now(), lastMsg: Date.now(), timer: null };
+  entry.pending = (async () => {
+    const url = await getAuthenticatedWsUrl(accessToken, acct.accountId);
+    const ws = await openDerivSocket(url);
+    if (ws.setMaxListeners) ws.setMaxListeners(100);
+    ws.on('message', () => { entry.lastMsg = Date.now(); });
+    ws.on('error', () => {});            // a 'close' event follows; avoids unhandled 'error' on an idle socket
+    ws.on('close', () => {
+      if (socketPool.get(k) === entry) socketPool.delete(k);
+      clearInterval(entry.timer);
+    });
+    entry.timer = setInterval(() => {
+      const now = Date.now();
+      if (now - entry.lastUsed > SOCKET_IDLE_MS || now - entry.lastMsg > SOCKET_DEAD_MS) {
+        if (socketPool.get(k) === entry) socketPool.delete(k);
+        clearInterval(entry.timer); closeSocket(ws); return;
+      }
+      try { ws.send(JSON.stringify({ ping: 1 })); } catch (_) {}
+    }, SOCKET_PING_MS);
+    if (entry.timer.unref) entry.timer.unref();
+    entry.ws = ws; entry.pending = null;
+    return ws;
+  })();
+  socketPool.set(k, entry);
+  try { return await entry.pending; }
+  catch (err) { if (socketPool.get(k) === entry) socketPool.delete(k); throw err; }
+}
+
+// Lets the browser open the socket ahead of the first trade (called when a page/bot loads or starts).
+app.post('/api/deriv/warm', async (req, res) => {
+  const acct = getActiveAccount(req), accessToken = getAccessToken(req);
+  if (!acct || !accessToken) return res.status(401).json({ error: 'No active Deriv account.' });
+  try { await getPooledSocket(acct, accessToken); res.json({ ok: true }); }
+  catch (err) { res.status(502).json({ error: err.message || 'Could not reach Deriv.' }); }
+});
+
 app.get('/api/deriv/balance', async (req, res) => {
   const acct = getActiveAccount(req);
   const accessToken = getAccessToken(req);
@@ -461,13 +528,11 @@ app.get('/api/deriv/balance', async (req, res) => {
     return res.status(401).json({ error: 'No active Deriv account.' });
   }
 
-  let ws;
   try {
-    const wsUrl = await getAuthenticatedWsUrl(accessToken, acct.accountId);
-    ws = await openDerivSocket(wsUrl);
+    const ws = await getPooledSocket(acct, accessToken);
 
     const data = await wsRequest(ws, {
-      balance: 1
+      balance: 1, req_id: nextReq()
     }, {
       predicate: msg => msg.msg_type === 'balance'
     });
@@ -482,11 +547,10 @@ app.get('/api/deriv/balance', async (req, res) => {
     });
   } catch (err) {
     console.error('Deriv balance error:', err.message);
+    if (!err.derivCode) dropPooled(acct);
     res.status(502).json({
       error: err.message || 'Could not fetch balance from Deriv.'
     });
-  } finally {
-    closeSocket(ws);
   }
 });
 
@@ -685,84 +749,52 @@ app.post('/api/deriv/trade', async (req, res) => {
   let ws;
 
   try {
-    const wsUrl = await getAuthenticatedWsUrl(accessToken, acct.accountId);
-    ws = await openDerivSocket(wsUrl);
+    ws = await getPooledSocket(acct, accessToken);
 
     const contractType = direction === 'RISE' ? 'CALL' : direction === 'FALL' ? 'PUT' : direction;
 
-    const proposalRequest = {
-      proposal: 1, amount, basis: 'stake', contract_type: contractType,
+    const buyParameters = {
+      amount, basis: 'stake', contract_type: contractType,
       currency: acct.currency, duration_unit: 't',
       duration: requestedDuration,
-      underlying_symbol: String(symbol),
-      req_id: Date.now() % 1000000000
+      underlying_symbol: String(symbol)
     };
-    if (needsBarrier) proposalRequest.barrier = String(digitBarrier);
-    let proposalResponse;
-    try {
-      proposalResponse = await wsRequest(ws, proposalRequest, {
-        predicate: msg => msg.msg_type === 'proposal'
-      });
-    } catch (proposalErr) {
-      // Log proposal parameters only; never log the OAuth token or authenticated URL.
-      console.error('Deriv proposal rejected:', JSON.stringify({
-        code: proposalErr.derivCode || null,
-        message: proposalErr.message,
-        symbol: String(symbol),
-        contractType,
-        duration: requestedDuration,
-        durationUnit: 't',
-        barrier: needsBarrier ? digitBarrier : undefined,
-        currency: acct.currency
-      }));
-      const codeText = proposalErr.derivCode ? ` [${proposalErr.derivCode}]` : '';
-      const err = new Error(`Deriv rejected ${contractType} proposal for ${String(symbol)} (${requestedDuration} ticks)${codeText}: ${proposalErr.message}`);
-      err.derivCode = proposalErr.derivCode || null;
-      throw err;
-    }
+    if (needsBarrier) buyParameters.barrier = String(digitBarrier);
 
-    const proposal = proposalResponse.proposal || {};
-    const proposalId = proposal.id;
-    const askPrice = Number(proposal.ask_price);
-    
-console.log('Deriv proposal diagnostic:', JSON.stringify({
-  msg_type: proposalResponse.msg_type,
-  req_id: proposalResponse.req_id,
-  proposal_id_received: Boolean(proposal.id),
-  ask_price: proposal.ask_price,
-  contract_type: proposal.contract_type,
-  underlying_symbol: proposal.underlying_symbol,
-  longcode: proposal.longcode
-}));
-
-
-    if (!proposalId || !Number.isFinite(askPrice)) {
-      throw new Error('Deriv returned an incomplete trade proposal.');
-    }
-
-    // Buy with the contract parameters directly instead of the proposal ID.
-    // Proposal IDs expire within moments (and are tied to one connection), which made
-    // Deriv answer "Unknown contract proposal". Buying by parameters avoids that.
-    const { proposal: _p, req_id: _r, ...buyParameters } = proposalRequest;
+    // FAST PATH: buy straight away with the contract parameters. For a stake-basis contract the
+    // price is the stake, so the separate proposal round trip is not needed.
+    let askPrice = amount;
     let buyResponse;
     try {
       buyResponse = await wsRequest(ws, {
-        buy: 1,
-        price: Math.max(askPrice, amount),
-        parameters: buyParameters,
-        req_id: (Date.now() + 1) % 1000000000
+        buy: 1, price: amount, parameters: buyParameters, req_id: nextReq()
       }, { predicate: msg => msg.msg_type === 'buy' });
-    } catch (paramErr) {
-      // Fallback: refresh the proposal and buy its fresh ID immediately.
-      console.warn('Buy by parameters failed, retrying with fresh proposal:', paramErr.message);
-      const fresh = await wsRequest(ws, { ...proposalRequest, req_id: (Date.now() + 2) % 1000000000 },
-        { predicate: msg => msg.msg_type === 'proposal' });
+    } catch (buyErr) {
+      // A timeout / dropped socket may mean the buy DID go through: never retry those (no double purchase).
+      if (!buyErr.derivCode) throw buyErr;
+      // Deriv answered with an error: ask for a fresh proposal (clearer message) and buy by its id.
+      console.warn('Direct buy refused, retrying with a proposal:', buyErr.message);
+      let fresh;
+      try {
+        fresh = await wsRequest(ws, { proposal: 1, ...buyParameters, req_id: nextReq() },
+          { predicate: msg => msg.msg_type === 'proposal' });
+      } catch (proposalErr) {
+        // Log proposal parameters only; never log the OAuth token or authenticated URL.
+        console.error('Deriv proposal rejected:', JSON.stringify({
+          code: proposalErr.derivCode || null, message: proposalErr.message,
+          symbol: String(symbol), contractType, duration: requestedDuration, durationUnit: 't',
+          barrier: needsBarrier ? digitBarrier : undefined, currency: acct.currency
+        }));
+        const codeText = proposalErr.derivCode ? ` [${proposalErr.derivCode}]` : '';
+        const err = new Error(`Deriv rejected ${contractType} proposal for ${String(symbol)} (${requestedDuration} ticks)${codeText}: ${proposalErr.message}`);
+        err.derivCode = proposalErr.derivCode || buyErr.derivCode || 'rejected';
+        throw err;
+      }
       const fp = fresh.proposal || {};
-      if (!fp.id) throw paramErr;
+      if (!fp.id || !Number.isFinite(Number(fp.ask_price))) throw buyErr;
+      askPrice = Number(fp.ask_price);
       buyResponse = await wsRequest(ws, {
-        buy: String(fp.id),
-        price: Number(fp.ask_price),
-        req_id: (Date.now() + 3) % 1000000000
+        buy: String(fp.id), price: askPrice, req_id: nextReq()
       }, { predicate: msg => msg.msg_type === 'buy' });
     }
 
@@ -777,8 +809,8 @@ console.log('Deriv proposal diagnostic:', JSON.stringify({
 
     // Subscribe to the open contract until it is finally sold/settled.
     const finalContract = await new Promise((resolve, reject) => {
-      const reqId = Date.now() % 1000000000;
-      let done = false;
+      const reqId = nextReq();
+      let done = false, subId = null;
 
       const cleanup = () => {
         clearTimeout(timer);
@@ -791,6 +823,7 @@ console.log('Deriv proposal diagnostic:', JSON.stringify({
         if (done) return;
         done = true;
         cleanup();
+        if (subId) { try { ws.send(JSON.stringify({ forget: subId })); } catch (_) {} }   // free the stream on the shared socket
         error ? reject(error) : resolve(value);
       };
 
@@ -813,6 +846,7 @@ console.log('Deriv proposal diagnostic:', JSON.stringify({
         ) return;
 
         const contract = data.proposal_open_contract || {};
+        if (data.subscription && data.subscription.id) subId = data.subscription.id;
 
         if (contract.is_sold || ['sold', 'expired', 'cancelled'].includes(String(contract.status || '').toLowerCase())) {
           finish(contract);
@@ -869,6 +903,7 @@ console.log('Deriv proposal diagnostic:', JSON.stringify({
       recorded = true;
       message += ` (Contract ${boughtContract} was bought but not confirmed settled; counted as a loss of the stake for safety.)`;
     }
+    if (ws && !err.derivCode) dropPooled(acct);      // timeout / closed socket: next trade opens a fresh one
     res.status(502).json({
       error: message,
       derivCode: err.derivCode || null,
@@ -876,7 +911,6 @@ console.log('Deriv proposal diagnostic:', JSON.stringify({
     });
   } finally {
     risk.inFlight = false;
-    closeSocket(ws);
   }
 });
 
