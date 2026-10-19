@@ -176,7 +176,7 @@
     S.trades.unshift(rec);
     if (S.trades.length > 300) S.trades.pop();
     emit('trade', rec);
-    if (S.switchEnabled && body.source !== 'switch' && d.isWin === true && isOverUnder(body.direction)) maybeQueueSwitch(body);
+    if (S.switchEnabled && body.source !== 'switch' && body.source !== 'bot' && d.isWin === true && isOverUnder(body.direction)) maybeQueueSwitch(body);
   }
 
   // Watches EVERY trade request (including the untouched Smart Strategy's).
