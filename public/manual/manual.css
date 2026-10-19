@@ -28,9 +28,7 @@ button,input,select{font:inherit}button,select{cursor:pointer}
 .dot{width:9px;height:9px;border-radius:50%;background:var(--red);display:inline-block}.dot.ok{background:var(--green)}
 .price{margin-left:auto;font:700 22px "JetBrains Mono",monospace}
 .lastdigit{color:var(--muted);font-size:12px}.lastdigit b{color:var(--yellow);font-size:20px}
-.chart{height:260px}.chart svg{width:100%;height:100%;display:block}
-.empty{height:100%;display:flex;align-items:center;justify-content:center;color:var(--muted)}
-.freq{display:flex;align-items:flex-end;gap:8px;height:130px;padding-top:18px}
+.freq{display:flex;align-items:flex-end;gap:8px;height:150px;padding-top:34px}
 .fbar{flex:1;position:relative;background:linear-gradient(#3bb8ff,#1765db);border-radius:5px 5px 0 0;min-height:4px}
 .fbar.max{background:linear-gradient(#66ff7a,#00bd6d)}.fbar.min{background:linear-gradient(#c77dff,#6e50c8)}
 .fbar.sel{outline:2px solid var(--yellow)}
@@ -62,3 +60,17 @@ button,input,select{font:inherit}button,select{cursor:pointer}
 .positions b{font-family:"JetBrains Mono",monospace}
 .toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#0c3c3c;border:1px solid var(--green);padding:11px 16px;border-radius:9px;display:none;z-index:20;max-width:90vw}
 @media(max-width:900px){.grid{grid-template-columns:1fr}.top h1{flex-basis:100%;order:-1}}
+
+.chartwrap{position:relative;height:320px;border-radius:10px;overflow:hidden;background:#04121f}
+.chartwrap canvas{width:100%;height:100%;display:block;touch-action:none;cursor:crosshair;user-select:none}
+.zoomctl{position:absolute;left:8px;top:8px;display:flex;gap:4px}
+.zoomctl button{background:#0b2b45cc;color:#d6e9f5;border:1px solid var(--line);border-radius:6px;min-width:30px;height:28px;padding:0 8px;font-weight:bold}
+.zoomctl .live{color:var(--green)}.zoomctl .live.on{background:var(--green);color:#00261d}
+.freqhead{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px}
+.freqhead h2{margin:0}
+.statn{display:flex;gap:4px;flex-wrap:wrap}
+.statn button{border:1px solid var(--line);background:#061b2d;color:#cde5f2;padding:5px 9px;border-radius:7px;font-size:11px}
+.statn button.active{background:var(--green);color:#00261d;font-weight:bold}
+#freqSummary{margin:8px 0 0}
+.fbar em{position:absolute;top:-32px;left:0;right:0;text-align:center;font-style:normal;color:var(--yellow);font-size:12px;line-height:1}
+.fbar.cur{outline:2px solid var(--yellow)}

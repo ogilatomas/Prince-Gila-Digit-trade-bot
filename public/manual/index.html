@@ -33,10 +33,22 @@
         <span class="price" id="price">—</span>
         <span class="lastdigit">Last digit <b id="lastDigit">—</b></span>
       </div>
-      <div id="chart" class="chart"></div>
+      <div class="chartwrap">
+        <canvas id="chartCanvas"></canvas>
+        <div class="zoomctl">
+          <button id="zoomIn" title="Zoom in">+</button>
+          <button id="zoomOut" title="Zoom out">−</button>
+          <button id="goLive" class="live" title="Jump back to the latest tick">Live</button>
+        </div>
+      </div>
+      <p class="fine">Scroll or pinch to zoom · drag to move through older ticks · hover for the price</p>
     </div>
     <div class="panel">
-      <h2>Digit frequency <small id="freqNote">(last 100 ticks)</small></h2>
+      <div class="freqhead">
+        <h2>Last digit prediction <small id="freqNote"></small></h2>
+        <div id="statN" class="statn"></div>
+      </div>
+      <p id="freqSummary" class="fine"></p>
       <div id="freq" class="freq"></div>
     </div>
   </section>
