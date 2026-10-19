@@ -2,7 +2,7 @@
  *
  * - Live ticks:  Deriv's public WebSocket (same address the dashboard uses). No fake data.
  * - Chart:       canvas chart with zoom, scroll, hover price, latest-price tag and trade markers.
- * - Digits:      last-digit prediction bars with a selectable tick window (25 to 1000).
+ * - Digits:      last-digit prediction circles (latest digit glows) with a selectable tick window (25 to 1000).
  * - Account:     /api/deriv/accounts, /api/deriv/select, /api/deriv/balance
  * - Trades:      POST /api/deriv/trade  (the server enforces stake + loss limits)
  * - Limits:      /api/risk
@@ -364,7 +364,7 @@
   window.addEventListener('resize', scheduleDraw);
 
   // =========================================================================
-  // 3. LAST DIGIT PREDICTION (frequency bars with a tick window)
+  // 3. LAST DIGIT PREDICTION (ten circles; the latest digit glows)
   // =========================================================================
   function renderStatN() {
     const box = $('statN'); box.innerHTML = '';
@@ -376,7 +376,21 @@
     });
   }
 
+  // Ten circles, built once and updated in place so the glow moves smoothly from digit to digit.
+  const freqEls = [];
+  function buildFreq() {
+    const box = $('freq'); box.innerHTML = ''; freqEls.length = 0;
+    for (let d = 0; d < 10; d++) {
+      const wrap = document.createElement('div'); wrap.className = 'dc';
+      const circle = document.createElement('div'); circle.className = 'dcirc'; circle.textContent = String(d);
+      const pct = document.createElement('b'); pct.textContent = '0.0%';
+      wrap.appendChild(circle); wrap.appendChild(pct); box.appendChild(wrap);
+      freqEls.push({ wrap, pct });
+    }
+  }
+
   function renderFreq() {
+    if (freqEls.length !== 10) buildFreq();
     const N = Math.min(S.statN, S.ticks.length);
     const counts = Array(10).fill(0);
     S.ticks.slice(S.ticks.length - N).forEach(t => counts[t.digit]++);
@@ -385,9 +399,11 @@
     const cur = S.ticks.length ? S.ticks[S.ticks.length - 1].digit : -1;
     $('freqNote').textContent = '(' + N + (N < S.statN ? ' of ' + S.statN : '') + ' ticks)';
     $('freqSummary').textContent = N ? 'Most: ' + pct.indexOf(mx) + ' (' + mx.toFixed(1) + '%) · Least: ' + pct.indexOf(mn) + ' (' + mn.toFixed(1) + '%) · Current digit: ' + cur : 'Waiting for ticks…';
-    $('freq').innerHTML = pct.map((v, d) =>
-      '<div class="fbar' + (v === mx ? ' max' : v === mn ? ' min' : '') + (S.tab.barrier && d === S.digit ? ' sel' : '') + (d === cur ? ' cur' : '') +
-      '" style="height:' + Math.max(4, v * 5) + 'px">' + (d === cur ? '<em>▼</em>' : '') + '<b>' + v.toFixed(1) + '%</b><span>' + d + '</span></div>').join('');
+    freqEls.forEach((el, d) => {
+      el.pct.textContent = pct[d].toFixed(1) + '%';
+      el.wrap.className = 'dc' + (N && pct[d] === mx ? ' max' : '') + (N && pct[d] === mn ? ' min' : '') +
+        (d === cur ? ' cur' : '') + (S.tab.barrier && d === S.digit ? ' sel' : '');
+    });
   }
 
   // =========================================================================

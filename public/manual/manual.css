@@ -28,13 +28,6 @@ button,input,select{font:inherit}button,select{cursor:pointer}
 .dot{width:9px;height:9px;border-radius:50%;background:var(--red);display:inline-block}.dot.ok{background:var(--green)}
 .price{margin-left:auto;font:700 22px "JetBrains Mono",monospace}
 .lastdigit{color:var(--muted);font-size:12px}.lastdigit b{color:var(--yellow);font-size:20px}
-.freq{display:flex;align-items:flex-end;gap:8px;height:150px;padding-top:34px}
-.fbar{flex:1;position:relative;background:linear-gradient(#3bb8ff,#1765db);border-radius:5px 5px 0 0;min-height:4px}
-.fbar.max{background:linear-gradient(#66ff7a,#00bd6d)}.fbar.min{background:linear-gradient(#c77dff,#6e50c8)}
-.fbar.sel{outline:2px solid var(--yellow)}
-.fbar b{position:absolute;top:-16px;left:0;right:0;text-align:center;font-size:10px}
-.fbar span{position:absolute;bottom:-18px;left:0;right:0;text-align:center;color:var(--muted);font-size:11px}
-.freq{padding-bottom:20px}
 .tabs{display:grid;grid-template-columns:1fr 1fr;gap:6px}
 .tabs button{border:1px solid var(--line);background:#061b2d;color:#cde5f2;padding:9px 6px;border-radius:8px;font-size:12px}
 .tabs button.active{background:var(--green);color:#00261d;font-weight:bold}
@@ -72,5 +65,22 @@ button,input,select{font:inherit}button,select{cursor:pointer}
 .statn button{border:1px solid var(--line);background:#061b2d;color:#cde5f2;padding:5px 9px;border-radius:7px;font-size:11px}
 .statn button.active{background:var(--green);color:#00261d;font-weight:bold}
 #freqSummary{margin:8px 0 0}
-.fbar em{position:absolute;top:-32px;left:0;right:0;text-align:center;font-style:normal;color:var(--yellow);font-size:12px;line-height:1}
-.fbar.cur{outline:2px solid var(--yellow)}
+
+/* Last digit prediction: ten circles */
+.freq{display:grid;grid-template-columns:repeat(10,1fr);gap:8px;padding:30px 0 4px}
+.dc{position:relative;text-align:center;min-width:0}
+.dc b{display:block;margin-top:7px;font:600 11px "JetBrains Mono",monospace;color:#9bbdd0}
+.dcirc{width:100%;max-width:56px;aspect-ratio:1;margin:0 auto;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font:700 clamp(14px,2.2vw,21px) "JetBrains Mono",monospace;color:#d6e9f5;background:#08243a;border:3px solid #1d6f93;
+  transition:background .25s,color .25s,box-shadow .25s,border-color .25s}
+.dc.max .dcirc{border-color:var(--green)}.dc.max b{color:var(--green)}
+.dc.min .dcirc{border-color:var(--red)}.dc.min b{color:var(--red)}
+.dc.sel .dcirc{outline:2px dashed #19c9f4;outline-offset:4px}
+.dc.cur .dcirc{background:var(--yellow);color:#241d00;border-color:#fff6b0;animation:glow 1.3s ease-in-out infinite}
+.dc.cur b{color:var(--yellow)}
+.dc.cur::before{content:"▼";position:absolute;top:-22px;left:0;right:0;color:var(--yellow);font-size:13px;line-height:1;text-shadow:0 0 8px var(--yellow)}
+@keyframes glow{
+  0%,100%{box-shadow:0 0 8px 2px #ffe34e99,0 0 18px 4px #ffe34e44}
+  50%{box-shadow:0 0 16px 6px #ffe34ecc,0 0 34px 12px #ffe34e66}}
+@media(max-width:520px){.freq{grid-template-columns:repeat(5,1fr);row-gap:22px}}
+@media(prefers-reduced-motion:reduce){.dc.cur .dcirc{animation:none;box-shadow:0 0 14px 5px #ffe34ecc}}
