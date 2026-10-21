@@ -123,6 +123,8 @@
     sel.value = cfg.symbol; render();
   }
 
+  window.DigitBotCfg = () => Object.assign({}, cfg);      // lets the Analysis Lab replay these exact settings
+
   load();
   (function wait() {
     if (!$('freq') || !B || !Hub || !TC) return setTimeout(wait, 300);

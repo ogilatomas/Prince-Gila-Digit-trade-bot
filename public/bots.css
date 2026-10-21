@@ -68,3 +68,21 @@
 .gb-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:5px}
 .gb-stats div{background:#fff1a888;border-radius:8px;padding:5px 4px;text-align:center}
 .gb-stats small{display:block;font-size:9px}.gb-stats b{font:900 13px "JetBrains Mono",monospace}.gb-stats b.gb-loss{color:#b3261e}
+
+/* ===== Analysis Lab ===== */
+.lab-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}
+.lab-btn{padding:12px;border:0;border-radius:10px;background:#0a9d63;color:#fff;font:700 14px Inter,Arial,sans-serif;cursor:pointer}
+.lab-btn.alt{background:#1d6f93}
+.lab-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
+.lab-table th{text-align:left;color:var(--m);font-weight:normal;padding:5px;border-bottom:1px solid #0a3b54}
+.lab-table td{padding:6px 5px;border-bottom:1px solid #0a2c42;font-family:"JetBrains Mono",monospace}
+.lab-table tr.flag td{color:var(--y)}
+.lab-sum{font-size:12px;color:#cfe3ef;line-height:1.5;margin:10px 0}
+.lab-margin{margin-top:12px}
+.lab-card{background:#08243a;border-radius:10px;padding:10px;margin-top:10px}
+.lab-card h4{margin:0 0 8px;font-size:13px}
+.lab-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.lab-grid div{background:#061b2d;border-radius:8px;padding:7px}.lab-grid small{display:block;color:var(--m);font-size:10px}
+.lab-grid b{font:700 13px "JetBrains Mono",monospace}.lab-grid b.g{color:var(--g)}.lab-grid b.r{color:var(--r)}
+.lab-verdict{margin:8px 0 0;font-weight:700;font-size:13px;color:var(--y)}
+@media(max-width:520px){.lab-grid{grid-template-columns:1fr 1fr}}
