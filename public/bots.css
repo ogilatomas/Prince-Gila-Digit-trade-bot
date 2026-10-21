@@ -1,0 +1,70 @@
+/* bots.css — styles for the Over/Under & Even/Odd bot panel (Manual Trading page) and the golden floating bot (all pages). */
+
+/* ===== Over/Under & Even/Odd bot panel ===== */
+.dbot{--g:#00f59b;--l:#087fa9;--m:#91b3c8;--y:#ffe34e;--r:#ff4d6a}
+.dbot-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+.dbot-head h2{margin:0}
+.dbot-pill{font:700 11px "JetBrains Mono",monospace;padding:4px 10px;border-radius:99px;background:#2b3a48;color:#cfe0ec}
+.dbot-pill.on{background:#063e3b;color:var(--g)}.dbot-pill.busy{background:#3a3410;color:var(--y)}
+.dbot-grid{display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px}
+.dbot label{display:block;font-size:12px;color:var(--m)}
+.dbot input,.dbot select{display:block;width:100%;margin-top:4px;padding:9px;background:#06192a;color:#fff;border:1px solid var(--l);border-radius:8px}
+.dbot .lbl{margin:12px 0 6px;color:var(--m);font-size:12px}.dbot .lbl small{font-size:10px}
+.dbot-seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:6px}
+.dbot-seg button{border:1px solid var(--l);background:#061b2d;color:#cde5f2;padding:10px 6px;border-radius:8px;font-size:13px}
+.dbot-seg button.active{background:var(--g);color:#00261d;font-weight:bold}
+.dbot .digits{display:grid;grid-template-columns:repeat(10,1fr);gap:5px}
+.dbot .digits button{padding:9px 0;border-radius:8px;border:1px solid #0a3b54;background:#08243a;color:#fff;font:700 14px "JetBrains Mono",monospace}
+.dbot .digits button.active{background:var(--g);color:#00261d}
+.dbot .digits button:disabled{opacity:.3;cursor:not-allowed}
+.dbot-entry{margin-top:12px}.dbot-entry small{font-size:10px}
+.dbot-live{margin-top:12px;background:#08243a;border-radius:10px;padding:10px;display:grid;gap:8px}
+.dbot-watch{font-size:12px;color:#d6e9f5}.dbot-watch i{font-style:normal;display:inline-block;min-width:20px;text-align:center;margin:0 2px;padding:1px 5px;border-radius:6px;background:#1d6f93;font-family:"JetBrains Mono",monospace;font-weight:700}
+.dbot-watch em{color:var(--m);font-size:10px}
+.dbot-strip{display:flex;flex-wrap:wrap;gap:4px}
+.dbot-strip span{width:26px;height:26px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:#0b3550;color:#9bbdd0;font:700 12px "JetBrains Mono",monospace}
+.dbot-strip span.hit{background:var(--y);color:#241d00}
+.dbot-go{width:100%;margin-top:12px;padding:15px;border:0;border-radius:10px;font:700 16px Inter,Arial,sans-serif;background:#0a9d63;color:#fff;cursor:pointer}
+.dbot-go.stop{background:#c93a54}
+.dbot-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:12px}
+.dbot-stats div{background:#08243a;border-radius:8px;padding:8px}.dbot-stats small{display:block;color:var(--m);font-size:10px}
+.dbot-stats b.g{color:var(--g)}.dbot-stats b.r{color:var(--r)}
+.dbot-log{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:5px;font-size:12px}
+.dbot-log li{display:flex;justify-content:space-between;gap:10px;background:#08243a;border-radius:8px;padding:7px 10px}
+.dbot-log li span{color:var(--m)}.dbot-log li.w b{color:var(--g)}.dbot-log li.l b{color:var(--r)}.dbot-log li.e b{color:#ffb3c0;font-weight:normal}
+@media(max-width:520px){.dbot-grid{grid-template-columns:1fr 1fr}.dbot-grid label:first-child{grid-column:1/-1}.dbot-seg{grid-auto-flow:row;grid-template-columns:1fr 1fr}.dbot-stats{grid-template-columns:1fr 1fr}}
+
+/* ===== Golden floating bot (draggable, on every page) ===== */
+.gbot{position:fixed;z-index:99999;width:318px;max-width:calc(100vw - 12px);left:auto;top:auto;border-radius:16px;
+  background:linear-gradient(145deg,#ffe066,#f7c52b 55%,#e0a500);border:2px solid #fff3b0;color:#0a6b25;font:800 13px Inter,Arial,sans-serif;
+  box-shadow:0 10px 30px #000a,0 0 22px #f7c52b88;touch-action:none}
+.gbot.drag{box-shadow:0 16px 40px #000c,0 0 30px #f7c52b;cursor:grabbing}
+.gbot *{box-sizing:border-box}
+.gbot header{display:flex;align-items:center;gap:8px;padding:9px 10px;cursor:grab;user-select:none;touch-action:none;border-bottom:2px solid #0a6b2540}
+.gb-title{flex:1;font-weight:900;letter-spacing:.5px;font-size:14px}
+.gb-pill{font:900 10px "JetBrains Mono",monospace;padding:3px 8px;border-radius:99px;background:#0a6b2522;color:#0a6b25;border:1px solid #0a6b25}
+.gb-pill.on{background:#0a8a35;color:#fff3b0}
+.gbot header button{width:26px;height:26px;border-radius:8px;border:2px solid #0a6b25;background:transparent;color:#0a6b25;font:900 16px/1 Arial;cursor:pointer}
+.gb-body{padding:10px;display:grid;gap:9px}
+.gbot.min .gb-body{display:none}.gbot.min{width:auto;min-width:190px}
+.gb-row{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:7px}
+.gbot label{display:block;font-size:11px;font-weight:900}
+.gbot input[type=number],.gbot select{display:block;width:100%;margin-top:3px;padding:7px;border-radius:8px;border:2px solid #0a6b25;background:#fff8d6;color:#0a6b25;font:900 13px "JetBrains Mono",monospace}
+.gb-check{display:flex!important;gap:7px;align-items:center;font-size:12px!important}
+.gb-check input{width:16px;height:16px;accent-color:#0a8a35}
+.gb-go{padding:12px;border:0;border-radius:10px;background:#0a8a35;color:#fff3b0;font:900 15px Inter,Arial,sans-serif;cursor:pointer;box-shadow:0 3px 0 #06551f}
+.gb-go.stop{background:#b3261e;color:#fff;box-shadow:0 3px 0 #7a1812}
+.gb-stages{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.gb-stage{border:2px solid #0a6b25;border-radius:9px;padding:6px 4px;text-align:center;background:#fff1a855}
+.gb-stage b{display:block;font-size:12px}.gb-stage span{font:900 11px "JetBrains Mono",monospace}
+.gb-stage.now{background:#0a8a35;color:#fff3b0;border-color:#06551f}
+.gb-stage.done{background:#fff8d6}.gb-stage.skip{opacity:.55;border-style:dashed}
+.gb-msg{margin:0;min-height:32px;font-size:12px;line-height:1.35}
+.gb-scan{width:100%;border-collapse:collapse;font:900 11px "JetBrains Mono",monospace}
+.gb-scan th{text-align:left;font-size:10px;padding:2px 4px;border-bottom:2px solid #0a6b2555}
+.gb-scan td{padding:3px 4px;border-bottom:1px solid #0a6b2530}
+.gb-scan td.q{background:#0a8a35;color:#fff3b0;border-radius:4px}
+.gb-scan tr.sel td:first-child{text-decoration:underline}
+.gb-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:5px}
+.gb-stats div{background:#fff1a888;border-radius:8px;padding:5px 4px;text-align:center}
+.gb-stats small{display:block;font-size:9px}.gb-stats b{font:900 13px "JetBrains Mono",monospace}.gb-stats b.gb-loss{color:#b3261e}
