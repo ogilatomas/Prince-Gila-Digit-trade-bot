@@ -9,7 +9,6 @@
 - **Volatility Markets** option (Smart Strategy market filter and Control Center market list) and **1 tick** is the default ticks per trade.
 - **Giant Bot Profile** card for this build (status, balance, session P/L, win rate, streak, per-strategy tally, latest trades).
 - Hot/Cold now trades: DIFFERS on the coldest persistent digit, otherwise MATCHES on the hottest.
-- **Automatic WhatsApp alerts (server-side).** Once the WhatsApp variables are set, the server watches the Volatility markets itself (`alert-monitor.js`) and sends ONE message listing every qualifying strategy plus a risk-based stake suggestion (`stake.js`). No browser needs to be open. Set `ALERT_BANKROLL` for the stake line. The stake is position sizing, not a profit forecast.
 - Run `npm test` for the logic tests (switch rule, stop behaviour, strategy definitions).
 
 Trading can lose money. Test on a Deriv **demo** account first.

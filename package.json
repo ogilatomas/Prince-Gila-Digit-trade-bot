@@ -9,7 +9,7 @@
   },
   "scripts": {
     "start": "node server.js",
-    "test": "node tests/run.js && node tests/alerts.test.js && node tests/bots.test.js"
+    "test": "node tests/run.js && node tests/bots.test.js"
   },
   "dependencies": {
     "express": "^4.21.2",

@@ -662,15 +662,6 @@ function digitTradeError(direction, barrier) {
 }
 
 // Instant-stop support: the browser reports stopped run ids; any trade still carrying one is refused.
-const { sendWhatsApp, isConfigured: whatsappConfigured } = require('./notify');
-let alertMonitorOn = false;
-app.get('/api/notify/status', (req, res) => res.json({ configured: whatsappConfigured(), monitor: alertMonitorOn }));
-app.post('/api/notify', async (req, res) => {
-  if (!getActiveAccount(req)) return res.status(401).json({ error: 'Connect your Deriv account first.' });   // stops strangers using your WhatsApp
-  try { res.json(await sendWhatsApp(req.body && req.body.text)); }
-  catch (err) { res.status(err.status || 502).json({ error: err.message }); }
-});
-
 const stoppedRuns = new Set();
 app.post('/api/bot/stop', (req, res) => {
   const ids = Array.isArray(req.body && req.body.runIds) ? req.body.runIds : [];
@@ -1043,12 +1034,4 @@ app.get('*', (req, res) =>
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`OGILA TRADERS running on port ${PORT}`);
-  // Automatic WhatsApp signal alerts (server-side, works with no browser open). Needs WhatsApp variables set.
-  if (whatsappConfigured() && process.env.ALERTS_AUTO !== 'false') {
-    try {
-      const { createMonitor } = require('./alert-monitor');
-      createMonitor({ WebSocketImpl: require('ws'), send: sendWhatsApp, url: DERIV_PUBLIC_WS }).start();
-      alertMonitorOn = true;
-    } catch (err) { console.error('[alerts] could not start:', err.message); }
-  }
 });
