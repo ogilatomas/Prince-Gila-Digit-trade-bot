@@ -1,6 +1,6 @@
 /* float-bot.js — golden floating scanner bot. Drag it anywhere; it stays on top of the page.
  * Tick the trade types you want (Differs / Over 0 / Under 9; at least one) before pressing START.
- * It scans every synthetic market (last 1,000 ticks) and trades the selected set, 1 tick by default:
+ * It scans every Volatility and Volatility (1s) market (last 1,000 ticks) and trades the selected set, 1 tick by default:
  *   1) Differs  — barrier = the market's most frequent digit            ×2 trades
  *   2) Over 0   — only on a market where digit 0 is the least frequent  ×2 trades
  *   3) Under 9  — only on a market where digit 9 is the least frequent  ×2 trades
@@ -98,7 +98,7 @@
   }
   let scanDirty = true;
   function renderScan() {
-    const rows = [...Hub.markets.values()];
+    const rows = [...Hub.markets.values()].filter(m => m.vol);   // Volatility + Volatility (1s) only
     if (!rows.length) { $('gbScan').innerHTML = `<tr><td colspan="4">${esc(Hub.status.text)}</td></tr>`; return; }
     $('gbScan').innerHTML = rows.map(mk => {
       const n = Math.min(cfg.windowN, mk.digits.length), c = B.countsOf(mk.digits, n), pct = d => (n ? c[d] / n * 100 : 0);
@@ -136,7 +136,7 @@
         const stage = B.STAGES[i]; st.stage = i; st.pick = null;
         if (!cfg.on[stage.id]) continue;   // not selected
         st.msg = `Scanning markets for ${stage.label}…`; render(); renderScan();
-        const pick = B.pickMarket(stage.id, [...Hub.markets.values()], cfg.windowN, 100);
+        const pick = B.pickMarket(stage.id, [...Hub.markets.values()].filter(m => m.vol), cfg.windowN, 100);
         if (!pick) { st.skipped[i] = true; st.msg = `No market qualifies for ${stage.label}: skipped.`; render(); await sleep(400); continue; }
         st.pick = pick; renderScan();
         for (let k = 0; k < PER_STAGE && alive(); k++) {

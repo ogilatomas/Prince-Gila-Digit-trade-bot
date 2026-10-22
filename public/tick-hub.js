@@ -75,7 +75,7 @@
       let mk = markets.get(sym(s));
       if (!mk) { mk = { symbol: sym(s), name: name(s), decimals: decimalsFrom(s.pip_size), digits: [], counts: Array(10).fill(0), last: null, ready: false }; markets.set(mk.symbol, mk); }
       mk.digits = []; mk.counts = Array(10).fill(0); mk.ready = false; mk.decimals = decimalsFrom(s.pip_size);
-      mk.group = group(s); mk.vol = isVol(s) && !is1s(s);   // vol = the original regular-Volatility set (used by the gold scanner)
+      mk.group = group(s); mk.vol = isVol(s);   // vol = Volatility indices, regular AND 1-second (used by the gold scanner)
       const id = nextReq++; reqMap.set(id, mk.symbol);
       send({ ticks_history: mk.symbol, count: WINDOW, end: 'latest', style: 'ticks', adjust_start_time: 1, req_id: id });
     });
