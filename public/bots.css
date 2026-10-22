@@ -86,3 +86,13 @@
 .lab-grid b{font:700 13px "JetBrains Mono",monospace}.lab-grid b.g{color:var(--g)}.lab-grid b.r{color:var(--r)}
 .lab-verdict{margin:8px 0 0;font-weight:700;font-size:13px;color:var(--y)}
 @media(max-width:520px){.lab-grid{grid-template-columns:1fr 1fr}}
+
+/* selectable trade types */
+.gb-stage{display:block;cursor:pointer;position:relative}
+.gb-stage input{position:absolute;top:4px;left:4px;width:14px;height:14px;margin:0;accent-color:#0a8a35;cursor:pointer}
+.gb-stage input:disabled{cursor:not-allowed}
+.gb-stage.off{opacity:.45;background:transparent;border-style:dotted}
+
+/* scanner list can now hold every synthetic market: scroll inside the panel */
+.gb-scanwrap{max-height:220px;overflow-y:auto}
+.gb-scan thead th{position:sticky;top:0;background:#fff3b0}

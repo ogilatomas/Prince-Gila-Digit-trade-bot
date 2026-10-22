@@ -116,7 +116,9 @@
   function fillMarkets() {
     const sel = $('dbMarket'); if (!sel || !Hub.markets.size) return;
     if (sel.options.length === Hub.markets.size && sel.dataset.filled) return;
-    sel.innerHTML = [...Hub.markets.values()].map(m => `<option value="${esc(m.symbol)}">${esc(m.name)}</option>`).join('');
+    const byGroup = new Map();
+    Hub.markets.forEach(m => { const g = m.group || 'Markets'; if (!byGroup.has(g)) byGroup.set(g, []); byGroup.get(g).push(m); });
+    sel.innerHTML = [...byGroup].map(([g, ms]) => `<optgroup label="${esc(g)}">${ms.map(m => `<option value="${esc(m.symbol)}">${esc(m.name)}</option>`).join('')}</optgroup>`).join('');
     sel.dataset.filled = '1';
     const manual = $('market');
     if (!cfg.symbol || !Hub.markets.has(cfg.symbol)) cfg.symbol = (manual && Hub.markets.has(manual.value) ? manual.value : (Hub.markets.has('R_100') ? 'R_100' : [...Hub.markets.keys()][0]));

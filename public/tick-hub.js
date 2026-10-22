@@ -1,10 +1,10 @@
 /* tick-hub.js — shared by the Over/Under & Even/Odd bot and the golden floating bot.
- *  TickHub     : one WebSocket to Deriv's PUBLIC feed; keeps the last 1,000 last-digits for every Volatility market.
+ *  TickHub     : one WebSocket to Deriv's PUBLIC feed; keeps the last 1,000 last-digits for every synthetic index (Volatility, 1s, Jump, Boom/Crash, Step, etc.).
  *  TradeClient : sends bot trades to your server (/api/deriv/trade), one at a time, using the dashboard queue when present. */
 (function (root) {
   'use strict';
   const WS_URL = 'wss://api.derivws.com/trading/v1/options/ws/public';
-  const WINDOW = 1000, MAX_MARKETS = 8;
+  const WINDOW = 1000, MAX_MARKETS = 60;
 
   // ---------------------------------------------------------------- TickHub
   const markets = new Map();           // symbol -> { symbol, name, decimals, digits[], counts[10], last, ready }
@@ -40,7 +40,10 @@
     sock.onmessage = e => {
       if (sock !== ws) return;
       let m; try { m = JSON.parse(e.data); } catch (_) { return; }
-      if (m.error) { if (m.msg_type !== 'tick') setStatus(false, 'Feed error: ' + (m.error.message || m.error.code)); return; }
+      if (m.error) {
+        if (m.req_id && reqMap.has(m.req_id)) { markets.delete(reqMap.get(m.req_id)); reqMap.delete(m.req_id); checkReady(); return; }   // one market failed: drop it, don't block the rest
+        if (m.msg_type !== 'tick') setStatus(false, 'Feed error: ' + (m.error.message || m.error.code)); return;
+      }
       if (m.msg_type === 'active_symbols') onSymbols(m.active_symbols || [], send);
       else if (m.msg_type === 'history') onHistory(m, send);
       else if (m.msg_type === 'tick') onTick(m.tick);
@@ -60,15 +63,19 @@
     const name = s => s.underlying_symbol_name || s.display_name || sym(s);
     const isVol = s => /^Volatility/i.test(name(s)) || /^(R_\d+|1HZ\d+V)$/.test(sym(s));
     const is1s = s => /1s|^1HZ/i.test(name(s)) || /^1HZ/.test(sym(s));
+    const SYNTH_SYM = /^(R_\d+|1HZ\d+V|JD\d+|BOOM\d+N?|CRASH\d+N?|stpRNG\d*|RB\d+|RDBEAR|RDBULL|DEX\d+(UP|DOWN)|DSI\d+|WLD[A-Z]+|CRYETH|CRYBTC)$/i;
+    const isSynth = s => /synthetic/i.test(String(s.market || '')) || SYNTH_SYM.test(sym(s));
     const num = s => parseInt((name(s).match(/\d+/) || [0])[0], 10);
-    const picked = list.filter(s => isVol(s) && !is1s(s) && s.exchange_is_open !== 0 && s.is_trading_suspended !== 1)
-      .sort((a, b) => num(a) - num(b)).slice(0, MAX_MARKETS);
-    if (!picked.length) { setStatus(false, 'No Volatility markets returned'); return; }
+    const group = s => s.submarket_display_name || s.submarket || 'Synthetic indices';
+    const picked = list.filter(s => isSynth(s) && s.exchange_is_open !== 0 && s.is_trading_suspended !== 1)
+      .sort((a, b) => group(a).localeCompare(group(b)) || num(a) - num(b) || name(a).localeCompare(name(b))).slice(0, MAX_MARKETS);
+    if (!picked.length) { setStatus(false, 'No synthetic markets returned'); return; }
     reqMap.clear();
     picked.forEach(s => {
       let mk = markets.get(sym(s));
       if (!mk) { mk = { symbol: sym(s), name: name(s), decimals: decimalsFrom(s.pip_size), digits: [], counts: Array(10).fill(0), last: null, ready: false }; markets.set(mk.symbol, mk); }
       mk.digits = []; mk.counts = Array(10).fill(0); mk.ready = false; mk.decimals = decimalsFrom(s.pip_size);
+      mk.group = group(s); mk.vol = isVol(s) && !is1s(s);   // vol = the original regular-Volatility set (used by the gold scanner)
       const id = nextReq++; reqMap.set(id, mk.symbol);
       send({ ticks_history: mk.symbol, count: WINDOW, end: 'latest', style: 'ticks', adjust_start_time: 1, req_id: id });
     });
@@ -82,7 +89,10 @@
     prices.slice(-WINDOW).forEach(p => push(mk, digitOf(p, mk.decimals)));
     mk.ready = true;
     send({ ticks: mk.symbol, subscribe: 1 });
-    if ([...markets.values()].every(x => x.ready)) { setStatus(true, 'Live · ' + markets.size + ' markets'); emit('ready', markets); }
+    checkReady();
+  }
+  function checkReady() {
+    if (markets.size && [...markets.values()].every(x => x.ready)) { setStatus(true, 'Live · ' + markets.size + ' markets'); emit('ready', markets); }
   }
 
   function onTick(t) {

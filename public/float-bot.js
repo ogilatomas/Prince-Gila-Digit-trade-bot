@@ -1,5 +1,6 @@
 /* float-bot.js — golden floating scanner bot. Drag it anywhere; it stays on top of the page.
- * It scans every Volatility market (last 1,000 ticks) and trades this set, 1 tick by default:
+ * Tick the trade types you want (Differs / Over 0 / Under 9; at least one) before pressing START.
+ * It scans every synthetic market (last 1,000 ticks) and trades the selected set, 1 tick by default:
  *   1) Differs  — barrier = the market's most frequent digit            ×2 trades
  *   2) Over 0   — only on a market where digit 0 is the least frequent  ×2 trades
  *   3) Under 9  — only on a market where digit 9 is the least frequent  ×2 trades
@@ -15,11 +16,13 @@
   const KEY = 'goldBot.v1';
   const PER_STAGE = 2;
 
-  const cfg = { stake: 1, ticks: 1, windowN: 1000, repeat: false, min: false, x: null, y: null };
+  const cfg = { stake: 1, ticks: 1, windowN: 1000, repeat: false, min: false, x: null, y: null, on: { diff: true, over0: true, under9: true } };
   const st = { running: false, stage: -1, done: [0, 0, 0], skipped: [false, false, false], pick: null, msg: 'Ready. Press START.', trades: 0, wins: 0, losses: 0, pl: 0, sets: 0, real: false, errors: 0 };
   let el = null, runId = 0;
 
-  const load = () => { try { Object.assign(cfg, JSON.parse(localStorage.getItem(KEY)) || {}); } catch (_) {} };
+  const load = () => { try { Object.assign(cfg, JSON.parse(localStorage.getItem(KEY)) || {}); } catch (_) {} cfg.on = Object.assign({ diff: true, over0: true, under9: true }, cfg.on || {}); };
+  const chosen = () => B.STAGES.filter(s => cfg.on[s.id]);
+  const setSize = () => chosen().length * PER_STAGE;
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(cfg)); } catch (_) {} };
   const toast = m => { if (typeof window.toast === 'function') return window.toast(m); const t = $('toast'); if (t) { t.textContent = m; t.style.display = 'block'; clearTimeout(toast.t); toast.t = setTimeout(() => { t.style.display = 'none'; }, 4500); } };
 
@@ -33,11 +36,11 @@
     <label>Ticks<input id="gbTicks" type="number" min="1" max="10" step="1"></label>
     <label>Scan<select id="gbWin"><option value="100">100</option><option value="500">500</option><option value="1000">1000</option></select></label>
   </div>
-  <label class="gb-check"><input type="checkbox" id="gbRepeat"> Keep repeating the 6-trade set</label>
+  <label class="gb-check"><input type="checkbox" id="gbRepeat"> Keep repeating the <span id="gbSetN">6</span>-trade set</label>
   <button type="button" class="gb-go" id="gbGo">▶ START</button>
   <div class="gb-stages" id="gbStages"></div>
   <p class="gb-msg" id="gbMsg"></p>
-  <table class="gb-scan"><thead><tr><th>Market</th><th>Top</th><th>0%</th><th>9%</th></tr></thead><tbody id="gbScan"></tbody></table>
+  <div class="gb-scanwrap"><table class="gb-scan"><thead><tr><th>Market</th><th>Top</th><th>0%</th><th>9%</th></tr></thead><tbody id="gbScan"></tbody></table></div>
   <div class="gb-stats" id="gbStats"></div>
 </div>`;
     document.body.appendChild(el);
@@ -45,6 +48,13 @@
     ['gbStake', 'gbTicks'].forEach(id => $(id).addEventListener('input', () => { cfg.stake = $('gbStake').value; cfg.ticks = $('gbTicks').value; save(); }));
     $('gbWin').onchange = () => { cfg.windowN = Number($('gbWin').value); save(); renderScan(); };
     $('gbRepeat').onchange = () => { cfg.repeat = $('gbRepeat').checked; save(); };
+    $('gbStages').addEventListener('change', e => {
+      const box = e.target.closest('input[data-stage]'); if (!box) return;
+      if (st.running) { box.checked = !!cfg.on[box.dataset.stage]; return; }
+      cfg.on[box.dataset.stage] = box.checked;
+      if (!chosen().length) { cfg.on[box.dataset.stage] = true; box.checked = true; toast('Keep at least one trade type selected.'); }
+      save(); render();
+    });
     $('gbGo').onclick = () => (st.running ? stop('Stopped.') : start());
     $('gbMin').onclick = () => { cfg.min = !cfg.min; save(); applyMin(); };
     drag($('gbHead'));
@@ -77,10 +87,12 @@
     const pill = $('gbPill'); pill.textContent = st.running ? 'SCANNING' : 'IDLE'; pill.className = 'gb-pill' + (st.running ? ' on' : '');
     const go = $('gbGo'); go.textContent = st.running ? '■ STOP' : '▶ START'; go.classList.toggle('stop', st.running);
     $('gbStages').innerHTML = B.STAGES.map((s, i) => {
-      const cls = (st.running && st.stage === i ? ' now' : '') + (st.skipped[i] ? ' skip' : '') + (st.done[i] >= PER_STAGE ? ' done' : '');
-      const sub = st.skipped[i] ? 'skipped' : st.done[i] + '/' + PER_STAGE;
-      return `<div class="gb-stage${cls}"><b>${s.label}</b><span>${sub}</span></div>`;
+      const on = !!cfg.on[s.id];
+      const cls = (on && st.running && st.stage === i ? ' now' : '') + (!on ? ' off' : '') + (on && st.skipped[i] ? ' skip' : '') + (on && st.done[i] >= PER_STAGE ? ' done' : '');
+      const sub = !on ? 'off' : st.skipped[i] ? 'skipped' : st.done[i] + '/' + PER_STAGE;
+      return `<label class="gb-stage${cls}"><input type="checkbox" data-stage="${s.id}"${on ? ' checked' : ''}${st.running ? ' disabled' : ''}><b>${s.label}</b><span>${sub}</span></label>`;
     }).join('');
+    $('gbSetN').textContent = setSize();
     $('gbMsg').textContent = st.msg;
     $('gbStats').innerHTML = `<div><small>Trades</small><b>${st.trades}</b></div><div><small>Wins</small><b>${st.wins}</b></div><div><small>Losses</small><b class="gb-loss">${st.losses}</b></div><div><small>P/L</small><b class="${st.pl < 0 ? 'gb-loss' : ''}">${money(st.pl)}</b></div><div><small>Sets</small><b>${st.sets}</b></div>`;
   }
@@ -103,12 +115,13 @@
   async function start() {
     if (!Hub.ready) { st.msg = 'Still loading market data…'; render(); return toast('Still loading market data. Try again in a moment.'); }
     const stake = Number(cfg.stake), ticks = Number(cfg.ticks);
+    if (!chosen().length) return toast('Select at least one trade type.');
     if (!Number.isFinite(stake) || stake <= 0) return toast('Enter a stake above 0.');
     if (!Number.isInteger(ticks) || ticks < 1 || ticks > 10) return toast('Ticks must be a whole number from 1 to 10.');
     const acc = await TC.account(true);
     if (!acc.connected) { st.msg = 'Connect your Deriv account first.'; render(); return toast('Connect your Deriv account first.'); }
     st.real = !acc.active.isVirtual;
-    if (st.real && !window.confirm(`REAL MONEY AUTO-TRADING\n\nAccount: ${acc.active.loginid}\nThe gold bot will place up to 6 trades per set (Differs ×2, Over 0 ×2, Under 9 ×2), stake ${stake}, ${ticks} tick(s) each${cfg.repeat ? ', and keep repeating' : ''}.\n\nYou can lose your stakes. Start?`)) return;
+    if (st.real && !window.confirm(`REAL MONEY AUTO-TRADING\n\nAccount: ${acc.active.loginid}\nThe gold bot will place up to ${setSize()} trades per set (${chosen().map(s => s.label + ' ×' + PER_STAGE).join(', ')}), stake ${stake}, ${ticks} tick(s) each${cfg.repeat ? ', and keep repeating' : ''}.\n\nYou can lose your stakes. Start?`)) return;
     st.running = true; st.errors = 0; st.trades = st.wins = st.losses = st.pl = st.sets = 0;
     const my = ++runId; TC.warm(); render();
     loop(my, stake, ticks);
@@ -121,6 +134,7 @@
       st.done = [0, 0, 0]; st.skipped = [false, false, false]; let placed = 0;
       for (let i = 0; i < B.STAGES.length && alive(); i++) {
         const stage = B.STAGES[i]; st.stage = i; st.pick = null;
+        if (!cfg.on[stage.id]) continue;   // not selected
         st.msg = `Scanning markets for ${stage.label}…`; render(); renderScan();
         const pick = B.pickMarket(stage.id, [...Hub.markets.values()], cfg.windowN, 100);
         if (!pick) { st.skipped[i] = true; st.msg = `No market qualifies for ${stage.label}: skipped.`; render(); await sleep(400); continue; }
