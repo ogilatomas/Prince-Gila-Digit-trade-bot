@@ -97,17 +97,23 @@
   function onSymbols(list, send) {
     const sym = s => s.underlying_symbol || s.symbol;
     const name = s => s.underlying_symbol_name || s.display_name || sym(s);
-    const isVol = s => /^Volatility/i.test(name(s)) || /^(R_\d+|1HZ\d+V)$/.test(sym(s));
-    const is1s = s => /1s|^1HZ/i.test(name(s)) || /^1HZ/.test(sym(s));
+    // Every synthetic index Deriv returns: Volatility (incl. 1s), Jump, Boom/Crash, Step, Range Break, DEX, Drift Switch, etc.
+    const SYNTH_SYM = /^(R_\d+|1HZ\d+V|JD\d+|BOOM\d+N?|CRASH\d+N?|stpRNG\d*|RB\d+|RDBEAR|RDBULL|DEX\d+(UP|DOWN)|DSI\d+|WLD[A-Z]+|CRYETH|CRYBTC)$/i;
+    const isSynth = s => /synthetic/i.test(String(s.market || '')) || SYNTH_SYM.test(sym(s));
     const num = s => parseInt((name(s).match(/\d+/) || [0])[0], 10);
-    const picked = list.filter(s => isVol(s) && !is1s(s) && s.exchange_is_open !== 0 && s.is_trading_suspended !== 1)
-      .sort((a, b) => num(a) - num(b)).slice(0, 8);
-    if (!picked.length) { setFeed('No Volatility markets returned', false); return; }
+    const group = s => s.submarket_display_name || s.submarket || 'Synthetic indices';
+    const picked = list.filter(s => isSynth(s) && s.exchange_is_open !== 0 && s.is_trading_suspended !== 1)
+      .sort((a, b) => group(a).localeCompare(group(b)) || num(a) - num(b) || name(a).localeCompare(name(b)));
+    if (!picked.length) { setFeed('No synthetic markets returned', false); return; }
 
-    S.markets = picked.map(s => ({ symbol: sym(s), name: name(s), decimals: decimalsFrom(s.pip_size) }));
+    S.markets = picked.map(s => ({ symbol: sym(s), name: name(s), group: group(s), decimals: decimalsFrom(s.pip_size) }));
     const sel = $('market');
     if (!sel.options.length) {
-      S.markets.forEach(m => { const o = document.createElement('option'); o.value = m.symbol; o.textContent = m.name; sel.appendChild(o); });
+      const groups = new Map();
+      S.markets.forEach(m => {
+        if (!groups.has(m.group)) { const og = document.createElement('optgroup'); og.label = m.group; groups.set(m.group, og); sel.appendChild(og); }
+        const o = document.createElement('option'); o.value = m.symbol; o.textContent = m.name; groups.get(m.group).appendChild(o);
+      });
       S.selected = (S.markets.find(m => m.symbol === 'R_100') || S.markets[0]).symbol;
       sel.value = S.selected;
     }
