@@ -96,3 +96,6 @@
 /* scanner list can now hold every synthetic market: scroll inside the panel */
 .gb-scanwrap{max-height:220px;overflow-y:auto}
 .gb-scan thead th{position:sticky;top:0;background:#fff3b0}
+.dbot-cont{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:end;margin-top:12px}
+.dbot-toggle{border:1px solid var(--l);background:#061b2d;color:#cde5f2;padding:10px 6px;border-radius:8px;font-size:13px;cursor:pointer}
+.dbot-toggle.active{background:var(--g);color:#00261d;font-weight:bold}

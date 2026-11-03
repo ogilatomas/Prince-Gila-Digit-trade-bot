@@ -41,6 +41,8 @@
     if (!cfg.symbol) return 'Pick a market.';
     const ticks = Number(cfg.ticks);
     if (!Number.isInteger(ticks) || ticks < 1 || ticks > 10) return 'Ticks must be a whole number from 1 to 10.';
+    const times = cfg.times === undefined || cfg.times === null || cfg.times === '' ? 1 : Number(cfg.times);
+    if (!Number.isInteger(times) || times < 1 || times > 10) return 'Trades each time must be a whole number from 1 to 10.';
     const stake = Number(cfg.stake);
     if (!Number.isFinite(stake) || stake <= 0) return 'Enter a stake above 0.';
     if (Number.isFinite(Number(cfg.maxStake)) && Number(cfg.maxStake) > 0 && stake > Number(cfg.maxStake)) return `Stake is above your Max Stake (${cfg.maxStake}).`;
@@ -49,8 +51,10 @@
       if (cfg.barrier === null || cfg.barrier === undefined || cfg.barrier === '' || !Number.isInteger(b) || b < t.min || b > t.max)
         return `${t.label} needs a digit barrier from ${t.min} to ${t.max}.`;
     }
-    if (!NEEDS[cfg.need]) return 'Pick Once, Twice or Thrice for the trade entry.';
-    if (!effectiveEntry(cfg).length) return 'Type the digits the bot should watch for (nothing to watch by default for this barrier).';
+    if (!cfg.continuous) {                       // Continuous mode ignores entry digits, so only check them otherwise
+      if (!NEEDS[cfg.need]) return 'Pick Once, Twice or Thrice for the trade entry.';
+      if (!effectiveEntry(cfg).length) return 'Type the digits the bot should watch for (nothing to watch by default for this barrier).';
+    }
     return null;
   }
 
@@ -60,7 +64,7 @@
     const body = { symbol: cfg.symbol, direction: cfg.type, duration: Number(cfg.ticks), stake: Math.round(Number(cfg.stake) * 100) / 100, sid: 'bot', source: 'bot' };
     let label = t.label;
     if (t.barrier) { body.barrier = Number(cfg.barrier); label += ' ' + body.barrier; }
-    body.strategy = `AutoBot · ${label} · ${cfg.need}`;
+    body.strategy = `AutoBot · ${label} · ${cfg.continuous ? 'continuous' : cfg.need}`;
     return Object.assign(body, extra || {});
   }
 
@@ -71,6 +75,30 @@
       push(d) { if (watch.has(d)) n++; else n = 0; if (n >= need) { n = 0; return true; } return false; },
       get count() { return n; },
       reset() { n = 0; }
+    };
+  }
+
+  // ---- trade queue: no entry chance is skipped ----------------------------------------------
+  // Deriv trades run one at a time. An entry that appears while a trade is still open is queued and
+  // placed the moment that trade settles. MAX_QUEUE is only a runaway guard.
+  const MAX_QUEUE = 50;
+
+  // How many trades one tick should add to the queue.
+  //   Continuous ON : every tick, but only when nothing is open or waiting (so it never piles up).
+  //   Continuous OFF: only when the entry digits have just appeared (`hit`), even if a trade is open.
+  function tradesToQueue(cfg, ev) {
+    const times = Math.min(10, Math.max(1, Math.floor(Number(cfg.times)) || 1));
+    if (cfg.continuous) return !ev.busy && !ev.pending ? times : 0;
+    return ev.hit ? times : 0;
+  }
+
+  function makeQueue() {
+    let pending = 0;
+    return {
+      get pending() { return pending; },
+      add(n) { const room = Math.max(0, MAX_QUEUE - pending), a = Math.min(Math.max(0, n | 0), room); pending += a; return a; },
+      take() { if (pending > 0) { pending--; return true; } return false; },
+      clear() { pending = 0; }
     };
   }
 
@@ -121,7 +149,7 @@
     return best;
   }
 
-  const api = { TYPES, NEEDS, STAGES, parseDigits, defaultEntry, effectiveEntry, validate, buildBody, makeStreak, countsOf, stageCheck, pickMarket };
+  const api = { TYPES, NEEDS, STAGES, parseDigits, defaultEntry, effectiveEntry, validate, buildBody, makeStreak, tradesToQueue, makeQueue, MAX_QUEUE, countsOf, stageCheck, pickMarket };
   root.BotLogic = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
