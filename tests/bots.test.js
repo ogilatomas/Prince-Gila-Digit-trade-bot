@@ -46,4 +46,35 @@ assert.equal(B.pickMarket('under9', [A, Bm, Cm], 1000).symbol, 'B'); ok('Under 9
 assert.equal(B.pickMarket('over0', [Bm, Cm], 1000), null); ok('no qualifying market -> null (the bot skips it)');
 assert.equal(B.pickMarket('diff', [Cm], 1000), null); ok('a tie for most frequent does not qualify');
 assert.equal(B.pickMarket('diff', [{ symbol: 'X', name: 'X', digits: [1, 2, 3] }], 1000, 100), null); ok('too few ticks -> not scanned yet');
+
+console.log('Continuous mode, trades each time, no skipped entries');
+assert.equal(B.validate({ ...base, continuous: true, need: 'bogus', barrier: 0 }), null); ok('Continuous ignores entry digits / entry count');
+assert.ok(B.validate({ ...base, times: 0 }) && B.validate({ ...base, times: 11 }) && B.validate({ ...base, times: 2.5 })); ok('trades each time must be 1-10');
+assert.equal(B.validate({ ...base, times: 10 }), null); ok('10 trades each time is allowed');
+assert.equal(B.tradesToQueue({ continuous: true, times: 3 }, { hit: false, busy: false, pending: 0 }), 3); ok('Continuous: idle tick queues the chosen number of trades');
+assert.equal(B.tradesToQueue({ continuous: true, times: 3 }, { hit: false, busy: true, pending: 0 }), 0); ok('Continuous: no pile-up while a trade is open');
+assert.equal(B.tradesToQueue({ continuous: true, times: 3 }, { hit: false, busy: false, pending: 2 }), 0); ok('Continuous: waits until the batch has been placed');
+assert.equal(B.tradesToQueue({ continuous: false, times: 2 }, { hit: true, busy: true, pending: 5 }), 2); ok('Entry mode: an entry seen while busy is still queued');
+assert.equal(B.tradesToQueue({ continuous: false, times: 2 }, { hit: false, busy: false, pending: 0 }), 0); ok('Entry mode: nothing without an entry');
+const q = B.makeQueue(); assert.equal(q.add(3), 3); assert.equal(q.take(), true); assert.equal(q.pending, 2); q.clear(); assert.equal(q.take(), false); ok('queue add / take / clear');
+const q2 = B.makeQueue(); q2.add(B.MAX_QUEUE); assert.equal(q2.add(1), 0); ok('queue has a runaway cap');
+assert.ok(B.buildBody({ ...base, continuous: true }).strategy.includes('continuous')); ok('trade label shows continuous');
+
+// Simulation: Over 3 (entry digits 0,1,2, once). Each trade stays open for 2 ticks. No entry may be lost.
+(function () {
+  const cfg = { ...base, need: 'once', continuous: false, times: 1 };
+  const streak = B.makeStreak(B.effectiveEntry(cfg), 1), queue = B.makeQueue();
+  let busyFor = 0, placed = 0;
+  const digits = [5, 1, 2, 7, 0, 9, 1, 1, 8, 2];           // entry digits: 1,2,0,1,1,1,2 minus the non-entries -> 6 of them
+  const entries = digits.filter(d => [0, 1, 2].includes(d)).length;
+  digits.forEach(d => {
+    if (busyFor > 0) busyFor--;                            // a trade finishes
+    const hit = streak.push(d);
+    const add = B.tradesToQueue(cfg, { hit, busy: busyFor > 0, pending: queue.pending });
+    queue.add(add);
+    if (busyFor === 0 && queue.take()) { placed++; busyFor = 2; }
+  });
+  while (queue.pending) { if (busyFor > 0) busyFor--; if (busyFor === 0 && queue.take()) { placed++; busyFor = 2; } }
+  assert.equal(placed, entries); ok('simulation: every entry digit became a trade (' + placed + ' of ' + entries + ')');
+})();
 console.log('\nBot tests passed.');
