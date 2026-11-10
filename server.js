@@ -1032,6 +1032,135 @@ app.get('*', (req, res) =>
   res.sendFile(path.join(__dirname, 'public', 'index.html'))
 );
 
+// =============================================================================
+// ACCUMULATORS (manual trading)  --  PASTE THIS BLOCK INTO server.js
+// Place it directly ABOVE the line:   app.listen(PORT, '0.0.0.0', () => {
+// Uses helpers that already exist in server.js (getActiveAccount, getAccessToken,
+// getPooledSocket, wsRequest, nextReq, dropPooled, getRisk, riskBlockReason,
+// riskSnapshot, recordResult).
+// =============================================================================
+const accuOpen = new Map();   // loginid -> { contractId, stake, symbol, recorded }
+const ACCU_RATES = [0.01, 0.02, 0.03, 0.04, 0.05];
+
+function accuView(c) {
+  const n = v => (v === undefined || v === null || v === '' ? null : Number(v));
+  return {
+    contractId: c.contract_id || null,
+    status: c.status || 'open',
+    isSold: !!c.is_sold,
+    profit: n(c.profit),
+    currentValue: n(c.bid_price),            // what you would get if you sold now
+    sellPrice: n(c.sell_price),
+    spot: n(c.current_spot),
+    entrySpot: n(c.entry_spot),
+    highBarrier: n(c.high_barrier),
+    lowBarrier: n(c.low_barrier),
+    ticksPassed: n(c.tick_passed),
+    growthRate: n(c.growth_rate),
+    canSell: c.is_valid_to_sell === 1
+  };
+}
+
+function accuFinish(acct, contract) {
+  const st = accuOpen.get(acct.loginid);
+  const risk = getRisk(acct.loginid);
+  if (st && !st.recorded) {
+    const p = Number(contract.profit);
+    recordResult(risk, Number.isFinite(p) ? p : -st.stake);   // unknown result = count as loss (safe side)
+    st.recorded = true;
+  }
+  accuOpen.delete(acct.loginid);
+  return riskSnapshot(risk);
+}
+
+app.post('/api/deriv/accu/buy', async (req, res) => {
+  const acct = getActiveAccount(req), accessToken = getAccessToken(req);
+  if (!acct || !accessToken) return res.status(401).json({ error: 'No active Deriv account.' });
+
+  const { symbol, stake, growthRate, takeProfit } = req.body || {};
+  const amount = Number(stake), rate = Number(growthRate);
+  const tp = takeProfit === undefined || takeProfit === null || takeProfit === '' ? null : Number(takeProfit);
+
+  if (!symbol || !Number.isFinite(amount) || amount <= 0) return res.status(400).json({ error: 'Invalid accumulator request.' });
+  if (!ACCU_RATES.some(r => Math.abs(r - rate) < 1e-9)) return res.status(400).json({ error: 'Growth rate must be 1%, 2%, 3%, 4% or 5%.' });
+  if (tp !== null && (!Number.isFinite(tp) || tp <= 0)) return res.status(400).json({ error: 'Take profit must be above 0 (or left empty).' });
+
+  if (!acct.isVirtual) {
+    if (process.env.ALLOW_REAL_DIGIT_TRADES === 'false') return res.status(403).json({ error: 'Real-account trading has been switched off on this server.' });
+    if (req.body.confirmReal !== true) return res.status(403).json({ error: 'Real-account purchase requires explicit confirmation.' });
+  }
+  const envMax = Number(process.env.MAX_TRADE_STAKE);
+  const maxStake = Number.isFinite(envMax) && envMax > 0 ? Math.min(envMax, 5000) : 5000;
+  if (amount > maxStake) return res.status(400).json({ error: `Stake exceeds the server limit of ${maxStake}.` });
+
+  if (accuOpen.has(acct.loginid)) return res.status(409).json({ error: 'You already have an open accumulator. Sell it first.' });
+  const risk = getRisk(acct.loginid);
+  if (risk.inFlight) return res.status(409).json({ error: 'Another trade is still in progress.' });
+  const blocked = riskBlockReason(risk, amount);   // an accumulator can lose at most its stake
+  if (blocked) return res.status(403).json({ error: blocked, halted: true, risk: riskSnapshot(risk) });
+
+  try {
+    const ws = await getPooledSocket(acct, accessToken);
+    const parameters = {
+      amount, basis: 'stake', contract_type: 'ACCU', currency: acct.currency,
+      underlying_symbol: String(symbol), growth_rate: rate
+    };
+    if (tp !== null) parameters.limit_order = { take_profit: tp };
+
+    const r = await wsRequest(ws, { buy: 1, price: amount, parameters, req_id: nextReq() }, { predicate: m => m.msg_type === 'buy' });
+    const bought = r.buy || {};
+    if (!bought.contract_id) throw new Error('Deriv did not return a contract ID.');
+    accuOpen.set(acct.loginid, { contractId: bought.contract_id, stake: amount, symbol: String(symbol), recorded: false });
+    risk.lastStake = amount;
+    console.log(`Accumulator bought: ${symbol} ${rate * 100}% stake ${amount} -> contract ${bought.contract_id} (${acct.isVirtual ? 'demo' : 'REAL'} ${acct.loginid})`);
+    res.json({ contractId: bought.contract_id, buyPrice: Number(bought.buy_price ?? amount), risk: riskSnapshot(risk) });
+  } catch (err) {
+    console.error('Accumulator buy error:', err.message);
+    if (!err.derivCode) dropPooled(acct);
+    res.status(502).json({ error: err.message || 'Accumulator purchase failed.', derivCode: err.derivCode || null });
+  }
+});
+
+// The page calls this about once a second while an accumulator is open.
+app.get('/api/deriv/accu/status', async (req, res) => {
+  const acct = getActiveAccount(req), accessToken = getAccessToken(req);
+  if (!acct || !accessToken) return res.status(401).json({ error: 'No active Deriv account.' });
+  const st = accuOpen.get(acct.loginid);
+  if (!st) return res.json({ open: false });
+  try {
+    const ws = await getPooledSocket(acct, accessToken);
+    const r = await wsRequest(ws, { proposal_open_contract: 1, contract_id: st.contractId, req_id: nextReq() },
+      { predicate: m => m.msg_type === 'proposal_open_contract' });
+    const c = r.proposal_open_contract || {};
+    const out = { open: true, ...accuView(c) };
+    if (c.is_sold || ['sold', 'expired', 'cancelled'].includes(String(c.status || '').toLowerCase())) {
+      out.open = false; out.risk = accuFinish(acct, c);
+    }
+    res.json(out);
+  } catch (err) {
+    if (!err.derivCode) dropPooled(acct);
+    res.status(502).json({ error: err.message || 'Could not read the accumulator.' });
+  }
+});
+
+app.post('/api/deriv/accu/sell', async (req, res) => {
+  const acct = getActiveAccount(req), accessToken = getAccessToken(req);
+  if (!acct || !accessToken) return res.status(401).json({ error: 'No active Deriv account.' });
+  const st = accuOpen.get(acct.loginid);
+  if (!st) return res.status(404).json({ error: 'No open accumulator to sell.' });
+  try {
+    const ws = await getPooledSocket(acct, accessToken);
+    await wsRequest(ws, { sell: st.contractId, price: 0, req_id: nextReq() }, { predicate: m => m.msg_type === 'sell' });
+    const r = await wsRequest(ws, { proposal_open_contract: 1, contract_id: st.contractId, req_id: nextReq() },
+      { predicate: m => m.msg_type === 'proposal_open_contract' });
+    const c = r.proposal_open_contract || {};
+    res.json({ open: false, ...accuView(c), risk: accuFinish(acct, c) });
+  } catch (err) {
+    if (!err.derivCode) dropPooled(acct);
+    res.status(502).json({ error: err.message || 'Could not sell the accumulator.' });
+  }
+});
+// ============================ END ACCUMULATORS ===============================
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`OGILA TRADERS running on port ${PORT}`);
 });
