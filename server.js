@@ -23,7 +23,48 @@ app.use(session({
   }
 }));
 
-app.use(express.static(path.join(__dirname, 'public')));
+// SPEED: gzip the big text files (robotic.css, manual bundle, scripts) once, keep them in memory,
+// and serve the small compressed copy. Falls through to express.static for everything else.
+const zlib = require('zlib');
+const fs = require('fs');
+const PUBLIC_DIR = path.join(__dirname, 'public');
+const GZ_TYPES = { '.js': 'application/javascript; charset=UTF-8', '.css': 'text/css; charset=UTF-8', '.html': 'text/html; charset=UTF-8', '.json': 'application/json; charset=UTF-8', '.svg': 'image/svg+xml' };
+const gzCache = new Map();   // file -> { mtimeMs, buf, etag }
+app.use((req, res, next) => {
+  if (req.method !== 'GET' || !/\bgzip\b/.test(req.headers['accept-encoding'] || '')) return next();
+  let rel;
+  try { rel = decodeURIComponent(req.path); } catch (_) { return next(); }
+  if (rel.endsWith('/')) rel += 'index.html';
+  const ext = path.extname(rel).toLowerCase();
+  if (!GZ_TYPES[ext]) return next();
+  const file = path.normalize(path.join(PUBLIC_DIR, rel));
+  if (!file.startsWith(PUBLIC_DIR + path.sep)) return next();
+  fs.stat(file, (err, st) => {
+    if (err || !st.isFile() || st.size < 1024) return next();
+    let hit = gzCache.get(file);
+    const send = () => {
+      res.setHeader('Content-Type', GZ_TYPES[ext]);
+      res.setHeader('Content-Encoding', 'gzip');
+      res.setHeader('Vary', 'Accept-Encoding');
+      res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+      res.setHeader('ETag', hit.etag);
+      if (req.headers['if-none-match'] === hit.etag) return res.status(304).end();
+      res.setHeader('Content-Length', hit.buf.length);
+      res.end(hit.buf);
+    };
+    if (hit && hit.mtimeMs === st.mtimeMs) return send();
+    fs.readFile(file, (e2, data) => {
+      if (e2) return next();
+      zlib.gzip(data, { level: 6 }, (e3, buf) => {
+        if (e3) return next();
+        hit = { mtimeMs: st.mtimeMs, buf, etag: 'W/"gz-' + st.mtimeMs + '-' + buf.length + '"' };
+        gzCache.set(file, hit);
+        send();
+      });
+    });
+  });
+});
+app.use(express.static(PUBLIC_DIR));
 
 app.get('/api/health', (req, res) => res.json({
   ok: true,
@@ -334,7 +375,8 @@ function openDerivSocket(wsUrl) {
   const WebSocket = loadWebSocket();
 
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(wsUrl);
+    const ws = new WebSocket(wsUrl, { perMessageDeflate: false, handshakeTimeout: 10000 });
+    ws.once('open', () => { try { ws._socket && ws._socket.setNoDelay(true); } catch (_) {} });   // send small trade messages immediately
     let settled = false;
 
     const fail = (err) => {
@@ -1056,13 +1098,36 @@ function accuView(c) {
     highBarrier: n(c.high_barrier),
     lowBarrier: n(c.low_barrier),
     ticksPassed: n(c.tick_passed),
+    spotTime: n(c.current_spot_time),
+    entryTime: n(c.entry_tick_time),
     growthRate: n(c.growth_rate),
     canSell: c.is_valid_to_sell === 1
   };
 }
 
+// SPEED: instead of asking Deriv for the contract every second, subscribe once and keep the newest
+// update in memory. The status route then answers instantly from that copy.
+function accuWatch(ws, st) {
+  const reqId = nextReq();
+  const onMsg = (raw) => {
+    let m; try { m = JSON.parse(raw.toString()); } catch (_) { return; }
+    if (m.msg_type !== 'proposal_open_contract' || !m.proposal_open_contract) return;
+    if (Number(m.proposal_open_contract.contract_id) !== Number(st.contractId)) return;
+    st.last = m.proposal_open_contract; st.lastAt = Date.now();
+    if (m.subscription && m.subscription.id) st.subId = m.subscription.id;
+  };
+  ws.on('message', onMsg);
+  st.unwatch = () => {
+    try { ws.off('message', onMsg); } catch (_) {}
+    if (st.subId) { try { ws.send(JSON.stringify({ forget: st.subId })); } catch (_) {} }
+    st.unwatch = null;
+  };
+  try { ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: st.contractId, subscribe: 1, req_id: reqId })); } catch (_) { st.unwatch(); }
+}
+
 function accuFinish(acct, contract) {
   const st = accuOpen.get(acct.loginid);
+  if (st && st.unwatch) st.unwatch();
   const risk = getRisk(acct.loginid);
   if (st && !st.recorded) {
     const p = Number(contract.profit);
@@ -1110,7 +1175,9 @@ app.post('/api/deriv/accu/buy', async (req, res) => {
     const r = await wsRequest(ws, { buy: 1, price: amount, parameters, req_id: nextReq() }, { predicate: m => m.msg_type === 'buy' });
     const bought = r.buy || {};
     if (!bought.contract_id) throw new Error('Deriv did not return a contract ID.');
-    accuOpen.set(acct.loginid, { contractId: bought.contract_id, stake: amount, symbol: String(symbol), recorded: false });
+    const stNew = { contractId: bought.contract_id, stake: amount, symbol: String(symbol), recorded: false, last: null, lastAt: 0 };
+    accuOpen.set(acct.loginid, stNew);
+    accuWatch(ws, stNew);
     risk.lastStake = amount;
     console.log(`Accumulator bought: ${symbol} ${rate * 100}% stake ${amount} -> contract ${bought.contract_id} (${acct.isVirtual ? 'demo' : 'REAL'} ${acct.loginid})`);
     res.json({ contractId: bought.contract_id, buyPrice: Number(bought.buy_price ?? amount), risk: riskSnapshot(risk) });
@@ -1128,11 +1195,15 @@ app.get('/api/deriv/accu/status', async (req, res) => {
   const st = accuOpen.get(acct.loginid);
   if (!st) return res.json({ open: false });
   try {
-    const ws = await getPooledSocket(acct, accessToken);
-    const r = await wsRequest(ws, { proposal_open_contract: 1, contract_id: st.contractId, req_id: nextReq() },
-      { predicate: m => m.msg_type === 'proposal_open_contract' });
-    const c = r.proposal_open_contract || {};
-    const out = { open: true, ...accuView(c) };
+    let c = st.last;
+    if (!c || Date.now() - st.lastAt > 4000) {          // no fresh streamed update: ask Deriv directly
+      const ws = await getPooledSocket(acct, accessToken);
+      const r = await wsRequest(ws, { proposal_open_contract: 1, contract_id: st.contractId, req_id: nextReq() },
+        { predicate: m => m.msg_type === 'proposal_open_contract' });
+      c = r.proposal_open_contract || {};
+      st.last = c; st.lastAt = Date.now();
+    }
+    const out = { open: true, symbol: st.symbol, ...accuView(c) };
     if (c.is_sold || ['sold', 'expired', 'cancelled'].includes(String(c.status || '').toLowerCase())) {
       out.open = false; out.risk = accuFinish(acct, c);
     }
@@ -1154,7 +1225,7 @@ app.post('/api/deriv/accu/sell', async (req, res) => {
     const r = await wsRequest(ws, { proposal_open_contract: 1, contract_id: st.contractId, req_id: nextReq() },
       { predicate: m => m.msg_type === 'proposal_open_contract' });
     const c = r.proposal_open_contract || {};
-    res.json({ open: false, ...accuView(c), risk: accuFinish(acct, c) });
+    res.json({ open: false, symbol: st.symbol, ...accuView(c), risk: accuFinish(acct, c) });
   } catch (err) {
     if (!err.derivCode) dropPooled(acct);
     res.status(502).json({ error: err.message || 'Could not sell the accumulator.' });
