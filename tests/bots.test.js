@@ -78,24 +78,23 @@ assert.ok(B.buildBody({ ...base, continuous: true }).strategy.includes('continuo
   assert.equal(placed, entries); ok('simulation: every entry digit became a trade (' + placed + ' of ' + entries + ')');
 })();
 
-console.log('\nWait after entry digit');
+console.log('\nWait after each entry trade');
 (function () {
   const run = (w, ready) => { const x = B.makeWait(w); return ready.map(r => x.push(r)); };
-  assert.deepStrictEqual(run(0, [true, false, true]), [true, false, true]); ok('wait 0: trades on the entry tick (old behaviour)');
-  assert.deepStrictEqual(run(3, [true, false, false, false, false]), [false, false, false, true, false]); ok('wait 3: trade is due on the 3rd tick after the entry tick');
-  assert.deepStrictEqual(run(1, [true, false, false]), [false, true, false]); ok('wait 1: trade is due on the next tick');
-  assert.deepStrictEqual(run(2, [true, true, true, false, true]), [false, false, true, false, false]); ok('entries during the countdown are ignored, then a new entry arms again');
+  assert.deepStrictEqual(run(0, [true, false, true]), [true, false, true]); ok('wait 0: trades on every entry');
+  assert.deepStrictEqual(run(3, [true, true, true, true, true]), [true, false, false, false, true]); ok('wait 3: trades on entry, skips 3 ticks, then trades on the next entry');
+  assert.deepStrictEqual(run(2, [false, true, false, false, false, true]), [false, true, false, false, false, true]); ok('trade happens on the entry tick itself, not after the wait');
   const x = B.makeWait(4); x.push(true); x.push(false); x.reset();
-  assert.deepStrictEqual([x.push(false), x.push(false), x.push(false), x.push(false), x.push(false)], [false, false, false, false, false]); ok('reset() cancels a countdown');
+  assert.equal(x.push(true), true); ok('reset() ends the cool-down');
   assert.equal(B.makeWait(500).wait, B.MAX_WAIT); assert.equal(B.makeWait(-3).wait, 0); assert.equal(B.makeWait('abc').wait, 0); ok('wait is clamped to 0-' + B.MAX_WAIT);
   assert.equal(B.validate({ ...base }), null); assert.equal(B.validate({ ...base, waitTicks: '' }), null); assert.equal(B.validate({ ...base, waitTicks: 0 }), null);
   assert.equal(B.validate({ ...base, waitTicks: 50 }), null); ok('valid wait values pass');
   assert.ok(B.validate({ ...base, waitTicks: 51 })); assert.ok(B.validate({ ...base, waitTicks: -1 })); assert.ok(B.validate({ ...base, waitTicks: 2.5 })); assert.ok(B.validate({ ...base, waitTicks: 'x' })); ok('bad wait values refused');
 
-  // Simulation: Over 3, entry digits 0,1,2 once, wait 2. The trade must land exactly 2 ticks after the entry tick.
+  // Simulation: Over 3, entry digits 0,1,2 once, wait 2. Trade on the entry tick, skip 2 ticks, look again.
   const cfg = { ...base, need: 'once', waitTicks: 2 };
   const streak = B.makeStreak(B.effectiveEntry(cfg), 1), wait = B.makeWait(cfg.waitTicks), placedAt = [];
-  [5, 1, 8, 8, 7, 0, 9, 9, 4, 2, 6].forEach((d, i) => { if (wait.push(streak.push(d))) placedAt.push(i); });
-  assert.deepStrictEqual(placedAt, [3, 7]); ok('simulation: entries at ticks 1 and 5 -> trades exactly 2 ticks later (ticks 3 and 7); entry at tick 9 still counting');
+  [5, 1, 0, 2, 7, 0, 9, 9, 4, 2, 6].forEach((d, i) => { const c = wait.cooling; const r = c ? false : streak.push(d); if (wait.push(r)) placedAt.push(i); if (c) streak.reset(); });
+  assert.deepStrictEqual(placedAt, [1, 5, 9]); ok('simulation: trades at entry ticks 1, 5, 9; entries at ticks 2-3 (during the wait) ignored');
 })();
 console.log('\nBot tests passed.');
