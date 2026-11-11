@@ -20,7 +20,8 @@
     { id: 'md', label: 'Matches / Differs', a: { type: 'DIGITMATCH', label: 'Matches' }, b: { type: 'DIGITDIFF', label: 'Differs' }, barrier: 'Prediction digit' },
     { id: 'eo', label: 'Even / Odd',        a: { type: 'DIGITEVEN',  label: 'Even' },    b: { type: 'DIGITODD',  label: 'Odd' },     barrier: null },
     { id: 'ou', label: 'Over / Under',      a: { type: 'DIGITOVER',  label: 'Over' },    b: { type: 'DIGITUNDER', label: 'Under' },  barrier: 'Barrier digit' },
-    { id: 'rf', label: 'Rise / Fall',       a: { type: 'RISE',       label: 'Rise' },    b: { type: 'FALL',      label: 'Fall' },    barrier: null }
+    { id: 'rf', label: 'Rise / Fall',       a: { type: 'RISE',       label: 'Rise' },    b: { type: 'FALL',      label: 'Fall' },    barrier: null },
+    { id: 'ac', label: 'Accumulators',      a: { type: 'ACCU', label: 'Accumulators' }, b: { type: 'ACCU', label: 'Accumulators' }, barrier: null }
   ];
   const BARRIER_TYPES = ['DIGITMATCH', 'DIGITDIFF', 'DIGITOVER', 'DIGITUNDER'];
 
@@ -575,7 +576,7 @@
     TABS.forEach(t => {
       const b = document.createElement('button'); b.textContent = t.label;
       b.className = t.id === S.tab.id ? 'active' : '';
-      b.onclick = () => { S.tab = t; renderTabs(); renderBarrier(); updateBuyButtons(); renderFreq(); };
+      b.onclick = () => { S.tab = t; renderTabs(); renderBarrier(); updateBuyButtons(); renderFreq(); if (window.AccuUI) window.AccuUI.onTab(t.id === 'ac'); };
       box.appendChild(b);
     });
   }

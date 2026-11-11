@@ -63,6 +63,7 @@
         <div id="digits" class="digits"></div>
       </div>
 
+      <div id="normalBox">
       <div class="two">
         <label>Stake
           <input id="stake" type="number" min="0.35" step="0.01" value="1">
@@ -77,6 +78,33 @@
         <button id="buyB" class="buy b" disabled>—</button>
       </div>
       <p class="fine">Payout is set by Deriv at the moment of purchase and shown in the result. One trade at a time.</p>
+      </div>
+      <div id="accuBox" class="accubox" style="display:none">
+        <p class="lbl">Growth rate (per tick)</p>
+        <div id="accuRates" class="digits"></div>
+        <div class="two">
+          <label>Stake
+            <input id="accuStake" type="number" min="1" step="0.01" value="1">
+          </label>
+          <label>Take profit (optional)
+            <input id="accuTP" type="number" min="0.01" step="0.01" placeholder="auto-sell at">
+          </label>
+        </div>
+        <div class="buys">
+          <button id="accuBuy" class="buy a" disabled>Buy Accumulator</button>
+          <button id="accuSell" class="buy b" disabled>Sell now</button>
+        </div>
+        <div id="accuLive" class="accustats" style="display:none">
+          <div><small>Sell value</small><b id="accuValue">—</b></div>
+          <div><small>Profit</small><b id="accuProfit">—</b></div>
+          <div><small>Ticks survived</small><b id="accuTicks">—</b></div>
+          <div><small>Price</small><b id="accuSpot">—</b></div>
+          <div class="wide"><small>Safe range (leave it and you lose the stake)</small><b id="accuRange">—</b></div>
+        </div>
+        <p id="accuResult" class="fine"></p>
+        <p class="fine">Your stake grows every tick the price stays inside the range. If the price moves outside it, you lose the whole stake. Sell any time to keep the profit.</p>
+      </div>
+
     </div>
 
     <div class="panel">
@@ -93,6 +121,7 @@
 
 <div id="toast" class="toast" role="status"></div>
 <script src="/manual/manual.js"></script>
+<script src="/manual/accumulator.js"></script>
 <script src="/bot-logic.js"></script>
 <script src="/tick-hub.js"></script>
 <script src="/analysis-logic.js"></script>

@@ -84,3 +84,12 @@ button,input,select{font:inherit}button,select{cursor:pointer}
   50%{box-shadow:0 0 16px 6px #ffe34ecc,0 0 34px 12px #ffe34e66}}
 @media(max-width:520px){.freq{grid-template-columns:repeat(5,1fr);row-gap:22px}}
 @media(prefers-reduced-motion:reduce){.dc.cur .dcirc{animation:none;box-shadow:0 0 14px 5px #ffe34ecc}}
+
+/* ---- Accumulators ---- */
+.accubox .digits{grid-template-columns:repeat(5,1fr)}
+.accubox .digits button:disabled{opacity:.45}
+.accustats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.accustats div{background:#06192a;border:1px solid #0a3b54;border-radius:8px;padding:8px}
+.accustats .wide{grid-column:1 / -1}
+.accustats small{display:block;color:var(--muted);font-size:11px}
+.accustats b{font:700 14px "JetBrains Mono",monospace}
