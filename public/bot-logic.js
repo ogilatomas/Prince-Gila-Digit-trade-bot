@@ -11,6 +11,7 @@
     DIGITODD:   { label: 'Odd' }
   };
   const NEEDS = { once: 1, twice: 2, thrice: 3 };
+  const MAX_WAIT = 50;                           // most ticks the bot may wait after an entry
 
   // "0,1,2" / "012" / "0 1 2" -> [0,1,2]
   function parseDigits(text) {
@@ -43,6 +44,8 @@
     if (!Number.isInteger(ticks) || ticks < 1 || ticks > 10) return 'Ticks must be a whole number from 1 to 10.';
     const times = cfg.times === undefined || cfg.times === null || cfg.times === '' ? 1 : Number(cfg.times);
     if (!Number.isInteger(times) || times < 1 || times > 10) return 'Trades each time must be a whole number from 1 to 10.';
+    const wt = cfg.waitTicks === undefined || cfg.waitTicks === null || cfg.waitTicks === '' ? 0 : Number(cfg.waitTicks);
+    if (!Number.isInteger(wt) || wt < 0 || wt > MAX_WAIT) return `Wait ticks must be a whole number from 0 to ${MAX_WAIT}.`;
     const stake = Number(cfg.stake);
     if (!Number.isFinite(stake) || stake <= 0) return 'Enter a stake above 0.';
     if (Number.isFinite(Number(cfg.maxStake)) && Number(cfg.maxStake) > 0 && stake > Number(cfg.maxStake)) return `Stake is above your Max Stake (${cfg.maxStake}).`;
@@ -75,6 +78,28 @@
       push(d) { if (watch.has(d)) n++; else n = 0; if (n >= need) { n = 0; return true; } return false; },
       get count() { return n; },
       reset() { n = 0; }
+    };
+  }
+
+  // ---- wait after the entry digits ------------------------------------------------------------
+  // push(ready) is called once per tick. `ready` = the entry digits have just completed on this tick.
+  // It returns true on the tick a trade is DUE: exactly `wait` ticks after the entry tick.
+  // wait = 0 -> due on the entry tick itself. While counting down, further entries are ignored
+  // (they do not restart or stack the countdown). reset() cancels a countdown.
+  function makeWait(wait) {
+    const w = Math.min(MAX_WAIT, Math.max(0, Math.floor(Number(wait)) || 0));
+    let left = 0, armed = false;
+    return {
+      get wait() { return w; },
+      get armed() { return armed; },
+      get left() { return left; },
+      push(ready) {
+        if (w === 0) return !!ready;
+        if (armed) { left--; if (left <= 0) { armed = false; left = 0; return true; } return false; }
+        if (ready) { armed = true; left = w; }
+        return false;
+      },
+      reset() { armed = false; left = 0; }
     };
   }
 
@@ -149,7 +174,7 @@
     return best;
   }
 
-  const api = { TYPES, NEEDS, STAGES, parseDigits, defaultEntry, effectiveEntry, validate, buildBody, makeStreak, tradesToQueue, makeQueue, MAX_QUEUE, countsOf, stageCheck, pickMarket };
+  const api = { TYPES, NEEDS, MAX_WAIT, makeWait, STAGES, parseDigits, defaultEntry, effectiveEntry, validate, buildBody, makeStreak, tradesToQueue, makeQueue, MAX_QUEUE, countsOf, stageCheck, pickMarket };
   root.BotLogic = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

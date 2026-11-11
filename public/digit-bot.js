@@ -9,10 +9,10 @@
   const money = n => (n >= 0 ? '+' : '-') + Math.abs(n).toFixed(2);
   const KEY = 'digitBot.cfg';
 
-  const cfg = { type: 'DIGITOVER', barrier: 3, need: 'once', symbol: '', ticks: 1, stake: 1, entryText: '', continuous: false, times: 1 };
-  const st = { queue: B.makeQueue(), running: false, busy: false, streak: null, real: false, errors: 0, trades: 0, wins: 0, losses: 0, pl: 0, log: [] };
+  const cfg = { type: 'DIGITOVER', barrier: 3, need: 'once', symbol: '', ticks: 1, stake: 1, entryText: '', continuous: false, times: 1, waitTicks: 0 };
+  const st = { queue: B.makeQueue(), running: false, busy: false, streak: null, wait: null, entryDigit: null, ctx: '', real: false, errors: 0, trades: 0, wins: 0, losses: 0, pl: 0, log: [] };
 
-  function load() { try { Object.assign(cfg, JSON.parse(localStorage.getItem(KEY)) || {}); } catch (_) {} cfg.ticks = cfg.ticks || 1; cfg.times = Math.min(10, Math.max(1, Number(cfg.times) || 1)); cfg.continuous = cfg.continuous === true; }
+  function load() { try { Object.assign(cfg, JSON.parse(localStorage.getItem(KEY)) || {}); } catch (_) {} cfg.ticks = cfg.ticks || 1; cfg.times = Math.min(10, Math.max(1, Number(cfg.times) || 1)); cfg.continuous = cfg.continuous === true; cfg.waitTicks = Math.min(B.MAX_WAIT, Math.max(0, Math.floor(Number(cfg.waitTicks)) || 0)); }
   function save() { try { localStorage.setItem(KEY, JSON.stringify(cfg)); } catch (_) {} }
   function toast(msg) { if (window.toast) return window.toast(msg); const t = $('toast'); if (!t) return; t.textContent = msg; t.style.display = 'block'; clearTimeout(toast.t); toast.t = setTimeout(() => { t.style.display = 'none'; }, 4500); }
 
@@ -39,6 +39,7 @@
 <p class="lbl">Trade entry <small>(how many in a row before it trades)</small></p>
 <div class="dbot-seg" id="dbNeed"><button type="button" data-n="once">Once</button><button type="button" data-n="twice">Twice</button><button type="button" data-n="thrice">Thrice</button></div>
 </div>
+<label class="dbot-entry">Wait after entry digit <small>(ticks to wait before the trade; 0 = trade at once)</small><input id="dbWait" type="number" min="0" max="${B.MAX_WAIT}" step="1" inputmode="numeric"></label>
 <div class="dbot-live"><div id="dbWatch" class="dbot-watch"></div><div id="dbStrip" class="dbot-strip"></div></div>
 <button type="button" class="dbot-go" id="dbGo">▶ START BOT</button>
 <div class="dbot-stats" id="dbStats"></div>
@@ -51,9 +52,9 @@
     $('dbTimes').onchange = () => { cfg.times = Number($('dbTimes').value); changed(true); };
     $('dbDigits').onclick = e => { const b = e.target.closest('[data-b]'); if (!b || b.disabled) return; cfg.barrier = Number(b.dataset.b); changed(); };
     $('dbMarket').onchange = () => { cfg.symbol = $('dbMarket').value; changed(); };
-    ['dbTicks', 'dbStake', 'dbEntry'].forEach(id => $(id).addEventListener('input', () => { cfg.ticks = $('dbTicks').value; cfg.stake = $('dbStake').value; cfg.entryText = $('dbEntry').value; changed(true); }));
+    ['dbTicks', 'dbStake', 'dbEntry', 'dbWait'].forEach(id => $(id).addEventListener('input', () => { cfg.ticks = $('dbTicks').value; cfg.stake = $('dbStake').value; cfg.entryText = $('dbEntry').value; cfg.waitTicks = $('dbWait').value; changed(true); }));
     $('dbGo').onclick = () => (st.running ? stop('Stopped.') : start());
-    $('dbTimes').value = cfg.times; $('dbTicks').value = cfg.ticks; $('dbStake').value = cfg.stake; $('dbEntry').value = cfg.entryText;
+    $('dbTimes').value = cfg.times; $('dbTicks').value = cfg.ticks; $('dbStake').value = cfg.stake; $('dbEntry').value = cfg.entryText; $('dbWait').value = cfg.waitTicks;
     return true;
   }
 
@@ -62,10 +63,11 @@
     cfg.barrier = Math.min(t.max, Math.max(t.min, Number(cfg.barrier)));
   }
   function changed(typing) {
-    save(); if (st.streak) rebuildStreak();
+    save(); if (st.streak) rebuildStreak(); if (st.wait) rebuildWait();
     render(typing);
   }
   function rebuildStreak() { st.streak = B.makeStreak(B.effectiveEntry(cfg), B.NEEDS[cfg.need]); }
+  function rebuildWait() { st.wait = B.makeWait(cfg.waitTicks); }
 
   function render(typing) {
     const t = B.TYPES[cfg.type], watch = B.effectiveEntry(cfg), need = B.NEEDS[cfg.need];
@@ -86,6 +88,11 @@
       : `Continuous OFF: places ${times} trade${times > 1 ? 's' : ''} each time your entry digits appear. An entry seen while a trade is open is queued and placed right after, never skipped.`;
     if (cfg.continuous) $('dbWatch').innerHTML = `Continuous · <b>${times}</b> trade${times > 1 ? 's' : ''} per cycle · queued <b>${st.queue.pending}</b>`;
     else $('dbWatch').innerHTML = `Watching <b>${watch.length ? watch.map(d => `<i>${d}</i>`).join('') : '—'}</b> ${typed ? '' : '<em>(auto)</em>'} · need <b>${need}</b> in a row · run <b>${run}/${need}</b> · queued <b>${st.queue.pending}</b>`;
+    const wn = Math.max(0, Math.floor(Number(cfg.waitTicks)) || 0), wt = st.wait;
+    if (wn > 0) {
+      $('dbWatch').innerHTML += wt && wt.armed ? ` · entry seen, <b>${wt.left}</b> tick${wt.left === 1 ? '' : 's'} to wait` : ` · wait <b>${wn}</b> tick${wn === 1 ? '' : 's'} after entry`;
+      $('dbContNote').textContent += cfg.continuous ? ` After each trade settles it waits ${wn} tick${wn === 1 ? '' : 's'} before the next one.` : ` After the entry digits appear it waits ${wn} tick${wn === 1 ? '' : 's'}, then trades. Entries seen during the wait are ignored.`;
+    }
     const mk = Hub.markets.get(cfg.symbol), ws = new Set(watch);
     $('dbStrip').innerHTML = mk ? mk.digits.slice(-14).map(d => `<span class="${ws.has(d) ? 'hit' : ''}">${d}</span>`).join('') : '';
     const pill = $('dbPill'); pill.textContent = st.busy ? 'TRADING…' : st.running ? 'RUNNING' : 'STOPPED'; pill.className = 'dbot-pill' + (st.busy ? ' busy' : st.running ? ' on' : '');
@@ -103,19 +110,28 @@
     if (!acc.connected) return toast('Connect your Deriv account first (button at the top of this page).');
     st.real = !acc.active.isVirtual;
     if (st.real && !window.confirm(`REAL MONEY AUTO-TRADING\n\nAccount: ${acc.active.loginid}\n${B.TYPES[cfg.type].label}${B.TYPES[cfg.type].barrier ? ' ' + cfg.barrier : ''} on ${cfg.symbol}, stake ${cfg.stake}, ${cfg.ticks} tick(s), entry: ${cfg.continuous ? 'continuous' : cfg.need}, ${cfg.times} trade(s) each time\n\nThe bot will place trades by itself until you press Stop. You can lose your stakes. Start?`)) return;
-    rebuildStreak(); st.queue.clear(); st.running = true; st.busy = false; st.errors = 0;
+    rebuildStreak(); rebuildWait(); st.queue.clear(); st.running = true; st.busy = false; st.errors = 0;
     note(`Started · ${B.TYPES[cfg.type].label}${B.TYPES[cfg.type].barrier ? ' ' + cfg.barrier : ''} · ${cfg.symbol} · ${cfg.continuous ? 'continuous' : cfg.need} · ${cfg.times} per time`);
     TC.warm(); render();
   }
-  function stop(msg) { st.running = false; st.queue.clear(); if (msg) note(msg); if (st.streak) st.streak.reset(); render(); }
+  function stop(msg) { st.running = false; st.queue.clear(); if (msg) note(msg); if (st.streak) st.streak.reset(); if (st.wait) st.wait.reset(); render(); }
 
   function onTick(t) {
     if (t.symbol !== cfg.symbol) return;
     if (st.running) {
-      // Every tick is counted, even while a trade is open, so no entry chance is ever skipped.
-      const hit = !cfg.continuous && st.streak.push(t.digit);
-      const add = B.tradesToQueue(cfg, { hit, busy: st.busy, pending: st.queue.pending });
-      if (add && st.queue.add(add) < add) note(`Queue is full (${B.MAX_QUEUE}); an entry was not queued.`, 'e');
+      // Every tick is counted, even while a trade is open. `ready` = the entry digits just completed
+      // (or, in Continuous mode, nothing is open or queued). The wait counter then holds the trade back
+      // for exactly the number of ticks you typed, and only then is it queued.
+      const ready = cfg.continuous ? (!st.busy && !st.queue.pending) : st.streak.push(t.digit);
+      if (ready && !st.wait.armed) st.entryDigit = t.digit;
+      const due = st.wait.push(ready);
+      const add = due ? Math.min(10, Math.max(1, Math.floor(Number(cfg.times)) || 1)) : 0;
+      if (add) {
+        const waited = st.wait.wait;
+        st.ctx = waited ? (cfg.continuous ? ` · waited ${waited}t` : ` · entry ${st.entryDigit}, waited ${waited}t`) : '';
+        if (waited > 0 && (st.busy || st.queue.pending)) note(`Skipped: a trade was still open when the ${waited}-tick wait ended.`, 'e');
+        else if (st.queue.add(add) < add) note(`Queue is full (${B.MAX_QUEUE}); an entry was not queued.`, 'e');
+      }
       pump();                                        // places at once when idle
     }
     render(true);                                    // keep the digit strip / run counter live
@@ -134,7 +150,7 @@
     st.busy = false;
     if (r.kind === 'win' || r.kind === 'loss') {
       st.errors = 0; st.trades++; st.pl += r.profit; r.kind === 'win' ? st.wins++ : st.losses++;
-      note(`${r.kind === 'win' ? 'WIN' : 'LOSS'} ${money(r.profit)} · #${r.id}`, r.kind === 'win' ? 'w' : 'l');
+      note(`${r.kind === 'win' ? 'WIN' : 'LOSS'} ${money(r.profit)} · #${r.id}${st.ctx || ''}`, r.kind === 'win' ? 'w' : 'l');
     } else if (r.kind === 'stop') { note('Stopped: ' + r.msg, 'e'); toast(r.msg); st.running = false; st.queue.clear(); }
     else { st.errors++; note('Not placed: ' + r.msg, 'e'); if (st.errors >= 3) { st.running = false; st.queue.clear(); note('Stopped after 3 failed attempts.', 'e'); toast('Bot stopped after 3 failed attempts: ' + r.msg); } }
     render();
