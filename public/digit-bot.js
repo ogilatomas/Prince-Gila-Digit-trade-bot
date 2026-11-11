@@ -39,7 +39,7 @@
 <p class="lbl">Trade entry <small>(how many in a row before it trades)</small></p>
 <div class="dbot-seg" id="dbNeed"><button type="button" data-n="once">Once</button><button type="button" data-n="twice">Twice</button><button type="button" data-n="thrice">Thrice</button></div>
 </div>
-<label class="dbot-entry">Wait after entry digit <small>(ticks to wait before the trade; 0 = trade at once)</small><input id="dbWait" type="number" min="0" max="${B.MAX_WAIT}" step="1" inputmode="numeric"></label>
+<label class="dbot-entry">Wait after each trade <small>(ticks to skip after an entry trade before looking for the next entry; 0 = no wait)</small><input id="dbWait" type="number" min="0" max="${B.MAX_WAIT}" step="1" inputmode="numeric"></label>
 <div class="dbot-live"><div id="dbWatch" class="dbot-watch"></div><div id="dbStrip" class="dbot-strip"></div></div>
 <button type="button" class="dbot-go" id="dbGo">▶ START BOT</button>
 <div class="dbot-stats" id="dbStats"></div>
@@ -90,8 +90,8 @@
     else $('dbWatch').innerHTML = `Watching <b>${watch.length ? watch.map(d => `<i>${d}</i>`).join('') : '—'}</b> ${typed ? '' : '<em>(auto)</em>'} · need <b>${need}</b> in a row · run <b>${run}/${need}</b> · queued <b>${st.queue.pending}</b>`;
     const wn = Math.max(0, Math.floor(Number(cfg.waitTicks)) || 0), wt = st.wait;
     if (wn > 0) {
-      $('dbWatch').innerHTML += wt && wt.armed ? ` · entry seen, <b>${wt.left}</b> tick${wt.left === 1 ? '' : 's'} to wait` : ` · wait <b>${wn}</b> tick${wn === 1 ? '' : 's'} after entry`;
-      $('dbContNote').textContent += cfg.continuous ? ` After each trade settles it waits ${wn} tick${wn === 1 ? '' : 's'} before the next one.` : ` After the entry digits appear it waits ${wn} tick${wn === 1 ? '' : 's'}, then trades. Entries seen during the wait are ignored.`;
+      $('dbWatch').innerHTML += wt && wt.cooling ? ` · traded, waiting <b>${wt.left}</b> tick${wt.left === 1 ? '' : 's'} before next entry` : ` · waits <b>${wn}</b> tick${wn === 1 ? '' : 's'} after each entry trade`;
+      $('dbContNote').textContent += cfg.continuous ? ` After each trade it waits ${wn} tick${wn === 1 ? '' : 's'} before the next one.` : ` When the entry digits appear it trades at once, then waits ${wn} tick${wn === 1 ? '' : 's'} before looking for the next entry. Entries seen during the wait are ignored.`;
     }
     const mk = Hub.markets.get(cfg.symbol), ws = new Set(watch);
     $('dbStrip').innerHTML = mk ? mk.digits.slice(-14).map(d => `<span class="${ws.has(d) ? 'hit' : ''}">${d}</span>`).join('') : '';
@@ -119,18 +119,18 @@
   function onTick(t) {
     if (t.symbol !== cfg.symbol) return;
     if (st.running) {
-      // Every tick is counted, even while a trade is open. `ready` = the entry digits just completed
-      // (or, in Continuous mode, nothing is open or queued). The wait counter then holds the trade back
-      // for exactly the number of ticks you typed, and only then is it queued.
-      const ready = cfg.continuous ? (!st.busy && !st.queue.pending) : st.streak.push(t.digit);
-      if (ready && !st.wait.armed) st.entryDigit = t.digit;
+      // Entry seen -> trade at once -> skip the next `waitTicks` ticks -> look for a fresh entry.
+      // During the cool-down the entry run is cleared, so the next entry is counted from scratch.
+      const cooling = st.wait.cooling;
+      const ready = cfg.continuous ? (!st.busy && !st.queue.pending) : (cooling ? false : st.streak.push(t.digit));
       const due = st.wait.push(ready);
+      if (cooling && st.streak) st.streak.reset();
       const add = due ? Math.min(10, Math.max(1, Math.floor(Number(cfg.times)) || 1)) : 0;
       if (add) {
-        const waited = st.wait.wait;
-        st.ctx = waited ? (cfg.continuous ? ` · waited ${waited}t` : ` · entry ${st.entryDigit}, waited ${waited}t`) : '';
-        if (waited > 0 && (st.busy || st.queue.pending)) note(`Skipped: a trade was still open when the ${waited}-tick wait ended.`, 'e');
-        else if (st.queue.add(add) < add) note(`Queue is full (${B.MAX_QUEUE}); an entry was not queued.`, 'e');
+        st.entryDigit = t.digit;
+        const w = st.wait.wait;
+        st.ctx = cfg.continuous ? (w ? ` · then wait ${w}t` : '') : ` · entry ${st.entryDigit}${w ? `, then wait ${w}t` : ''}`;
+        if (st.queue.add(add) < add) note(`Queue is full (${B.MAX_QUEUE}); an entry was not queued.`, 'e');
       }
       pump();                                        // places at once when idle
     }

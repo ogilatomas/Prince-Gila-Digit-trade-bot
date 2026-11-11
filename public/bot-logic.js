@@ -11,7 +11,7 @@
     DIGITODD:   { label: 'Odd' }
   };
   const NEEDS = { once: 1, twice: 2, thrice: 3 };
-  const MAX_WAIT = 50;                           // most ticks the bot may wait after an entry
+  const MAX_WAIT = 50;                           // most ticks the bot may wait after an entry trade
 
   // "0,1,2" / "012" / "0 1 2" -> [0,1,2]
   function parseDigits(text) {
@@ -81,25 +81,25 @@
     };
   }
 
-  // ---- wait after the entry digits ------------------------------------------------------------
+  // ---- cool-down after each entry trade ----------------------------------------------------
   // push(ready) is called once per tick. `ready` = the entry digits have just completed on this tick.
-  // It returns true on the tick a trade is DUE: exactly `wait` ticks after the entry tick.
-  // wait = 0 -> due on the entry tick itself. While counting down, further entries are ignored
-  // (they do not restart or stack the countdown). reset() cancels a countdown.
+  // Flow: entry digit seen -> trade NOW (push returns true) -> skip the next `wait` ticks
+  // (entries during that cool-down are ignored) -> look for a fresh entry again.
+  // wait = 0 -> trade on every entry. `cooling` is true while ticks are being skipped. reset() ends it.
   function makeWait(wait) {
     const w = Math.min(MAX_WAIT, Math.max(0, Math.floor(Number(wait)) || 0));
-    let left = 0, armed = false;
+    let left = 0;
     return {
       get wait() { return w; },
-      get armed() { return armed; },
+      get armed() { return left > 0; },
+      get cooling() { return left > 0; },
       get left() { return left; },
       push(ready) {
-        if (w === 0) return !!ready;
-        if (armed) { left--; if (left <= 0) { armed = false; left = 0; return true; } return false; }
-        if (ready) { armed = true; left = w; }
+        if (left > 0) { left--; return false; }
+        if (ready) { left = w; return true; }
         return false;
       },
-      reset() { armed = false; left = 0; }
+      reset() { left = 0; }
     };
   }
 
