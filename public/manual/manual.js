@@ -160,6 +160,7 @@
     if (raf) return;
     raf = requestAnimationFrame(() => { raf = 0; drawChart(); });
   }
+  window.ManualChart = { S, scheduleDraw, idxByEpoch: e => idxByEpoch(e) };   // used by accumulator.js
   const effCount = () => Math.max(2, Math.min(S.view.count, S.ticks.length));
   function maxOffset() { return Math.max(0, S.ticks.length - effCount()); }
 
@@ -210,6 +211,7 @@
 
     let lo = Infinity, hi = -Infinity;
     for (let i = start; i < end; i++) { const p = S.ticks[i].price; if (p < lo) lo = p; if (p > hi) hi = p; }
+    if (S.overlay && S.overlay.range) { const rg = S.overlay.range(start, end); if (rg) { lo = Math.min(lo, rg.lo); hi = Math.max(hi, rg.hi); } }
     let pad = (hi - lo) * 0.14; if (!pad) pad = Math.abs(hi) * 0.0005 || 0.01;
     lo -= pad; hi += pad;
     const yAt = p => padT + (1 - (p - lo) / (hi - lo)) * plotH;
@@ -222,6 +224,9 @@
       ctx.strokeStyle = '#0d2a40'; ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
       ctx.fillStyle = '#6f93a8'; ctx.fillText(v.toFixed(S.decimals), W - padR + 6, y + 4);
     }
+
+    // accumulator safe-range band (drawn by accumulator.js through window.ManualChart)
+    if (S.overlay && S.overlay.draw) { try { S.overlay.draw(ctx, { xAt, yAt, start, end, top: padT, bottom: H - padB, left: padL, right: W - padR, W, H }); } catch (_) {} }
 
     // area + line
     const grad = ctx.createLinearGradient(0, padT, 0, H - padB);
